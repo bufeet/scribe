@@ -1,103 +1,99 @@
-# 🪶 Scribe — The Creative Sanctuary
+# 🪶 Scribe
 
 > *Where raw thought becomes literature.*
 
-Scribe is a highly polished, distraction-free digital writing retreat designed to restore tranquility to modern composition. Merging the offline, tactile magic of physical stationery with an intelligent, literary sounding board, Scribe provides an eye-safe aesthetic canvas where your ideas can unfurl naturally, supported by a gentle, localized AI companion.
+Scribe is a quiet place to write. It brings the tactile calm of paper into the browser, paired with a literary companion that speaks only when invited. No feeds, no metrics, no noise — just your words, framed by margin and light.
 
-Built for novelists, essayists, copywriters, and creative dreamers, Scribe is a monument to absolute user sovereignty, elegant typography, and peaceful workflow design.
-
----
-
-## 🌸 The Scribe Philosophy
-
-In an era dominated by chaotic feeds, loud notifications, and aggressive analytics, Scribe stands as an oasis of quiet focus. We believe:
-- **Writing requires quietude:** No busy sidebars, no flashing badges, and no clutter. Just your words, framed by generous margins and soft, warm tones.
-- **AI should amplify, not substitute:** Our inline literary companion listens silently, acting as a resonant chamber to mirror, extend, and refine your voice—never to replace your unique imagination.
-- **Your data is your sanctuary:** Your notes, drafts, histories, and credentials live entirely in your browser. We do not track, lease, or store a single syllable.
+Built for novelists, essayists, copywriters, and anyone who writes to think, Scribe is an argument for restraint: that a writing tool's job is to disappear.
 
 ---
 
-## ✨ Features
+## The Scribe Philosophy
 
-### 🎧 Scribe Gramophone (Integrated Retro Player)
-Compose to the rhythm of peace. Scribe includes a fully interactive virtual record player inspired by classic mid-century gramophones.
-- **Spinning Vinyl Animation:** Enjoy visual rhythm as the record platter spins and the mechanical tonearm drops when music plays.
-- **Audio File & Folder Library Import:** Wirelessly drag-and-drop or select any library of `.mp3`, `.wav`, or `.flac` files directly from your computer to construct your ultimate cozy writing playlist.
-- **Tactile Playback Controls:** Seamlessly pause, play, skip, adjust volume, or fast-forward/rewind 10 seconds.
-- **Persistent Atmosphere:** The player continues spinning and playing beautifully even when you collapse the sidebar to focus on writing.
+Modern software is loud by default — busy sidebars, flashing badges, engagement loops. Scribe is built against that grain.
+
+- **Writing needs quiet.** No clutter, no notifications competing for attention. Generous margins. Soft, warm tones that don't strain the eye at 2am or noon.
+- **AI should listen, not lead.** The companion built into Scribe never interrupts. It waits to be called, mirrors what's already on the page, and steps back. The voice on the page stays yours.
+- **Your drafts stay yours.** Documents, history, and settings are stored locally, in your browser. Nothing is uploaded to our servers, tracked, or sold. (See *Where Your Words Go* below for the one honest exception.)
+
+---
+
+## Features
+
+### 🎧 Scribe Gramophone
+A small, working record player lives in the sidebar — spinning platter, dropping tonearm, the whole ritual.
+- Drag in your own `.mp3`, `.wav`, or `.flac` library.
+- Play, pause, skip, or nudge forward/back 10 seconds.
+- Keeps spinning even when you collapse the sidebar to write.
+
+It's not a gimmick — it's a threshold. Starting the record is a small, physical cue that you're stepping out of the feed and into the work.
 
 ### 🪄 Literary Sounding Board
-Our subtle, text-triggered AI companion assists your writing flow exactly when you invite it.
-- **`@idea` — Horizon Expander:** Drop `@idea` anywhere in your text. Scribe reads the preceding paragraph to analyze the emotional tone, vocabulary, and plot direction, suggesting elegant completions that keep your momentum alive.
-- **`@fix` — Elegant Polisher:** Append `@fix` to refine grammar, spelling, and phrasing structures without stripping away your distinct, natural voice.
+Two commands, invoked only when you type them.
+- **`@idea`** — reads the paragraph before it and offers a few ways forward, matching your tone and direction. A nudge, not a rewrite.
+- **`@fix`** — tightens grammar and phrasing without flattening your voice into something generic.
 
-### 🛡️ Absolute Sovereignty (Offline-First Sandbox)
-- **Zero Server Retention:** Your documents are saved securely to your browser's local sandbox memory.
-- **Key Sandbox:** Scribe connects directly with your private Google Gemini credentials. Your API keys are saved locally and never exposed to external servers.
-- **Transient Trash & Chronicles:** Manage your workflow with non-destructive versioning, local trash restoration, and a clear, chronological log of your creative sessions.
+Nothing else in the editor talks to you. If you never type `@`, the companion never speaks.
 
-### 🖥️ Desktop Only Layout
-Scribe is meticulously tailored for immersive focus. To preserve its advanced typography pairings, spacing precision, and workspace density, the sanctuary is locked to desktop environments, welcoming mobile browsers with a friendly notification about future companions.
+### 🛡️ Local-First by Design
+- Documents, drafts, and version history live in your browser's local storage — never on a Scribe server.
+- Trash is recoverable and non-destructive; your session history is a plain, readable log, not a black box.
+- You bring your own Google Gemini API key, stored locally, used only to power `@idea` and `@fix`.
+
+### 🖥️ Desktop, on Purpose
+Scribe is built for one dedicated space, not a stolen five minutes on a phone. The typography, spacing, and density are tuned for a desktop screen and don't survive a smaller one gracefully — so for now, Scribe stays there. Mobile isn't an oversight; it's a boundary that protects what makes the desktop version work.
 
 ---
 
-## 🛠️ Quick Start
-
-Scribe runs directly in any modern desktop web browser. To launch your local instance and begin writing:
+## Quick Start
 
 ### 1. Prerequisites
-Ensure you have **Node.js** (v18+) and **npm** installed on your machine.
+Node.js (v18+) and npm.
 
 ### 2. Installation
-Clone the repository and install dependencies:
 ```bash
-# Clone the repository
 git clone https://github.com/joalx/scribe.git
 cd scribe
-
-# Install pristine dependencies
 npm install
 ```
 
-### 3. Launch Development Server
-Boot up the fast Vite dev server:
+### 3. Run it
 ```bash
 npm run dev
 ```
-Open your browser to `http://localhost:3000` to enter the workspace.
+Open `http://localhost:3000`.
 
 ---
 
-## 🔑 Obtaining Your Google Gemini API Key
+## Where Your Words Go
 
-To activate Scribe's **Literary Sounding Board** (`@idea` & `@fix`), you need a free API key from Google:
+Scribe stores everything locally — with one necessary exception: when you use `@idea` or `@fix`, the surrounding text is sent directly from your browser to Google's Gemini API to generate a response. That request never touches a Scribe server, but it does leave your machine, because that's how the feature works.
 
-1. **Visit Google AI Studio:** Navigate to [Google AI Studio](https://aistudio.google.com/).
-2. **Sign In:** Log in with your standard Google Account.
-3. **Generate Key:** Click the **"Get API key"** button in the upper left panel.
-4. **Create a New Key:** Choose to create a key in a new Cloud Project or select an existing one.
-5. **Insert Credentials:** Copy the generated secret key, launch Scribe, open the **Sanctuary Settings** tab at the bottom of the sidebar, and paste your key into the API Key input.
+Google's enterprise developer API terms state that prompts sent through their developer endpoints aren't used to train public models. We think that's worth knowing plainly, not glossing over — a sanctuary should be honest about its one open window, not just its locked doors.
 
-*Note: Scribe operates completely client-side. Google's enterprise developer API terms ensure that prompts passed via developer API endpoints are not used to train public foundation models—safeguarding your private drafts.*
+If you never invoke `@idea` or `@fix`, no text ever leaves your browser.
 
----
-
-## 🎨 Visual Identity
-
-Scribe uses an exquisite, high-contrast light theme built upon classic stationery aesthetics:
-- **Primary Typography:** **Inter** for clean, highly readable interface controls.
-- **Display Typography:** **Playfair Display / Space Grotesk** for elegant headings that match the rhythm of literature.
-- **Atmosphere Colors:** Soft, warm, warm-toned linen (`#EEEDE9` and `#FAF9F6`) balanced with rich charcoal grays (`#141413`) and beautiful rust orange accents (`#D97757`).
+### Getting a Gemini API Key
+1. Go to [Google AI Studio](https://aistudio.google.com/).
+2. Sign in with your Google Account.
+3. Click **Get API key**, and create or select a project.
+4. Copy the key, open Scribe's **Sanctuary Settings** in the sidebar, and paste it in.
 
 ---
 
-## ☕ Credits & Acknowledgments
+## Visual Identity
 
-All design concepts, creative direction, and implementation credits belong to:
-
-**João Leite** — Creative Software Crafter
-- **LinkedIn:** [@joalx](https://linkedin.com/in/joalx)
-- **Ethos:** Created with absolute devotion to peaceful, human-centric software.
+- **Interface type:** Inter
+- **Display type:** Playfair Display / Space Grotesk
+- **Palette:** warm linen (`#EEEDE9`, `#FAF9F6`), charcoal (`#141413`), rust accent (`#D97757`)
 
 ---
-*May your sanctuary bring you peace, focus, and magical creation.*
+
+## Credits
+
+**João Leite** — [@joalx](https://linkedin.com/in/joalx)
+
+Built with the conviction that software for thinking should get out of the way of thinking.
+
+---
+*May your sanctuary bring you peace, focus, and magical creation.*s
