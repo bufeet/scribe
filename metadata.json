@@ -1,0 +1,6 @@
+{
+  "name": "Scribe — Elegant Notes & Creative Sounding Board",
+  "description": "A beautiful, minimalist notes application styled with Claude-like aesthetics, featuring a guided product tour, trash management, change chronicles, and an AI creative sounding board activated by inline tags.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

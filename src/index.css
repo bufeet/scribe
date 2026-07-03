@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Sora", sans-serif;
+  --font-serif: "Fraunces", serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-claude-dark: var(--claude-dark);
+  --color-claude-bg: var(--claude-bg);
+  --color-claude-terracotta: #D97757;
+  --color-claude-accent: var(--claude-accent);
+}
+
+:root {
+  --claude-bg: #EEEDE9;
+  --claude-dark: #141413;
+  --claude-accent: #E0D4C1;
+}
+
+.dark {
+  --claude-bg: #151514;       /* Comfortable velvet dark-grey background */
+  --claude-dark: #ECEAE4;     /* Soothing warm off-white */
+  --claude-accent: #33322E;   /* Elegant subtle border accent */
+}
+
+@layer base {
+  body {
+    background-color: var(--claude-bg);
+    color: var(--claude-dark);
+    font-family: var(--font-sans);
+    transition: background-color 0.4s ease, color 0.4s ease;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--claude-accent);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #D97757;
+  }
+}
+
+/* Custom typing cursor and editor styles */
+.claude-editor::placeholder {
+  color: #a3a29e;
+}
+
+.glow-terracotta {
+  box-shadow: 0 0 20px rgba(217, 119, 87, 0.15);
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-fluid-gradient {
+  background: linear-gradient(135deg, var(--claude-bg) 0%, var(--claude-accent) 50%, var(--claude-bg) 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 10s ease infinite;
+}
+
