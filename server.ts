@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
@@ -246,8 +245,15 @@ app.post("/api/complete", async (req, res) => {
 
 // Serve frontend assets or mount Vite dev server
 async function startServer() {
+  if (process.env.VERCEL) {
+    // On Vercel, we only export the express app for serverless API endpoints.
+    // Static assets are served directly by Vercel's CDN.
+    return;
+  }
+
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    const { createServer } = await import("vite");
+    const vite = await createServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
@@ -260,12 +266,9 @@ async function startServer() {
     });
   }
 
-  // Only start listening if we are NOT running in a serverless environment (like Vercel)
-  if (!process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
 startServer();
