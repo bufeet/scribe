@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import React, { useState, FormEvent, DragEvent } from "react";
 import { Folder, Note, UserProfile } from "../types";
 import { 
   FolderPlus, FilePlus, ChevronDown, ChevronRight, ChevronLeft, Folder as FolderIcon, 
@@ -17,10 +17,12 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   onSelectView: (view: "editor" | "history" | "trash" | "settings") => void;
   onSelectNote: (noteId: string) => void;
-  onAddFolder: (name: string) => void;
+  onAddFolder: (name: string, parentId?: string | null) => void;
   onAddNote: (folderId: string | null) => void;
   onDeleteNote: (noteId: string) => void;
   onDeleteFolder: (folderId: string) => void;
+  onMoveNote: (noteId: string, folderId: string | null) => void;
+  onMoveFolder: (folderId: string, parentId: string | null) => void;
   isLoading?: boolean;
   onShowNotification?: (message: string, type?: "info" | "success" | "warning" | "error") => void;
 }
@@ -40,12 +42,20 @@ export default function Sidebar({
   onAddNote,
   onDeleteNote,
   onDeleteFolder,
+  onMoveNote,
+  onMoveFolder,
   isLoading = false,
   onShowNotification,
 }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [activeSubfolderParentId, setActiveSubfolderParentId] = useState<string | null>(null);
+  const [newSubfolderName, setNewSubfolderName] = useState("");
+
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dragOverRootFolders, setDragOverRootFolders] = useState(false);
+  const [dragOverRootNotes, setDragOverRootNotes] = useState(false);
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders(prev => ({
@@ -57,9 +67,81 @@ export default function Sidebar({
   const handleAddFolderSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (newFolderName.trim()) {
-      onAddFolder(newFolderName.trim());
+      onAddFolder(newFolderName.trim(), null);
       setNewFolderName("");
       setIsCreatingFolder(false);
+    }
+  };
+
+  const handleAddSubfolderSubmit = (e: FormEvent, parentId: string) => {
+    e.preventDefault();
+    if (newSubfolderName.trim()) {
+      onAddFolder(newSubfolderName.trim(), parentId);
+      setNewSubfolderName("");
+      setActiveSubfolderParentId(null);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, type: "note" | "folder", id: string) => {
+    e.stopPropagation();
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type, id }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDropOnFolder = (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    setDragOverFolderId(null);
+    try {
+      const dataStr = e.dataTransfer.getData("text/plain");
+      if (!dataStr) return;
+      const { type, id } = JSON.parse(dataStr);
+
+      if (type === "note") {
+        onMoveNote(id, targetFolderId);
+      } else if (type === "folder") {
+        if (id === targetFolderId) {
+          onShowNotification?.("Cannot move a folder into itself.", "warning");
+          return;
+        }
+
+        // Cycle check: make sure target is not a descendant of dragged folder
+        let currentParentId: string | null | undefined = targetFolderId;
+        while (currentParentId) {
+          if (currentParentId === id) {
+            onShowNotification?.("Cannot move a folder into its own subfolders.", "warning");
+            return;
+          }
+          const parent = folders.find(f => f.id === currentParentId);
+          currentParentId = parent?.parentId;
+        }
+
+        onMoveFolder(id, targetFolderId);
+      }
+    } catch (err) {
+      console.error("Drop error:", err);
+    }
+  };
+
+  const handleDropOnRoot = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverRootFolders(false);
+    setDragOverRootNotes(false);
+    try {
+      const dataStr = e.dataTransfer.getData("text/plain");
+      if (!dataStr) return;
+      const { type, id } = JSON.parse(dataStr);
+
+      if (type === "note") {
+        onMoveNote(id, null);
+      } else if (type === "folder") {
+        onMoveFolder(id, null);
+      }
+    } catch (err) {
+      console.error("Drop error:", err);
     }
   };
 
@@ -67,7 +149,199 @@ export default function Sidebar({
   const activeFolders = folders.filter(f => f.deletedAt === null);
   const activeNotes = notes.filter(n => n.deletedAt === null);
 
+  // Group standalone notes
   const standaloneNotes = activeNotes.filter(n => n.folderId === null);
+
+  // Filter out top-level folders (those without active parents)
+  const isRootFolder = (f: Folder) => {
+    if (!f.parentId) return true;
+    return !activeFolders.some(parent => parent.id === f.parentId);
+  };
+  const rootFolders = activeFolders.filter(isRootFolder);
+
+  // Recursive folder tree item renderer
+  const renderFolderItem = (folder: Folder, depth: number = 0) => {
+    const subfolders = activeFolders.filter(f => f.parentId === folder.id);
+    const nestedNotes = activeNotes.filter(n => n.folderId === folder.id);
+    const isExpanded = !!expandedFolders[folder.id];
+    const isDragOver = dragOverFolderId === folder.id;
+
+    return (
+      <div 
+        key={folder.id} 
+        className="space-y-1"
+      >
+        {/* Folder Item Row */}
+        <div 
+          draggable="true"
+          onDragStart={(e) => handleDragStart(e, "folder", folder.id)}
+          onDragOver={handleDragOver}
+          onDragEnter={(e) => {
+            e.stopPropagation();
+            setDragOverFolderId(folder.id);
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            if (dragOverFolderId === folder.id) {
+              setDragOverFolderId(null);
+            }
+          }}
+          onDrop={(e) => {
+            e.stopPropagation();
+            handleDropOnFolder(e, folder.id);
+          }}
+          style={{ paddingLeft: `${depth * 14 + 8}px` }}
+          className={`flex items-center justify-between group py-1.5 rounded-lg transition-all border border-transparent ${
+            isDragOver 
+              ? "bg-[#D97757]/20 border-[#D97757]/50 shadow-inner" 
+              : "hover:bg-[#EEEDE9]/5"
+          }`}
+        >
+          <button
+            id={`btn-folder-toggle-${folder.id}`}
+            onClick={() => toggleFolder(folder.id)}
+            className="flex-grow flex items-center gap-2 text-xs font-medium text-[#EEEDE9]/90 text-left transition-colors cursor-pointer min-w-0"
+          >
+            {isExpanded || subfolders.length > 0 || nestedNotes.length > 0 ? (
+              isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-[#EEEDE9]/50 shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-[#EEEDE9]/50 shrink-0" />
+              )
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 opacity-0 shrink-0" />
+            )}
+            <FolderIcon className="w-4 h-4 text-[#E0D4C1] shrink-0" />
+            <span className="truncate">{folder.name}</span>
+            {(nestedNotes.length > 0 || subfolders.length > 0) && (
+              <span className="text-[10px] font-mono text-[#EEEDE9]/40 bg-[#EEEDE9]/10 px-1.5 rounded-full shrink-0">
+                {nestedNotes.length + subfolders.length}
+              </span>
+            )}
+          </button>
+
+          {/* Folder Quick Actions */}
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 pr-1.5 shrink-0 transition-opacity">
+            <button
+              id={`btn-add-subfolder-${folder.id}`}
+              onClick={() => {
+                setActiveSubfolderParentId(folder.id);
+                setNewSubfolderName("");
+                if (!isExpanded) toggleFolder(folder.id);
+              }}
+              className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-[#D97757] transition-colors cursor-pointer"
+              title="Create nested folder"
+            >
+              <FolderPlus className="w-3 h-3" />
+            </button>
+            <button
+              id={`btn-add-note-to-folder-${folder.id}`}
+              onClick={() => {
+                onAddNote(folder.id);
+                if (!isExpanded) toggleFolder(folder.id);
+              }}
+              className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-white transition-colors cursor-pointer"
+              title="New note in folder"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+            <button
+              id={`btn-delete-folder-${folder.id}`}
+              onClick={() => onDeleteFolder(folder.id)}
+              className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-red-400 transition-colors cursor-pointer"
+              title="Delete Folder"
+            >
+              <Trash className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Inline subfolder input creator */}
+        {activeSubfolderParentId === folder.id && (
+          <form 
+            onSubmit={(e) => handleAddSubfolderSubmit(e, folder.id)} 
+            style={{ marginLeft: `${depth * 14 + 28}px` }}
+            className="mr-2 py-1 flex gap-1 bg-[#EEEDE9]/5 border border-[#EEEDE9]/10 rounded px-1.5"
+          >
+            <input
+              autoFocus
+              type="text"
+              placeholder="Subfolder name..."
+              value={newSubfolderName}
+              onChange={(e) => setNewSubfolderName(e.target.value)}
+              className="flex-grow bg-[#141413] border border-[#EEEDE9]/20 rounded px-2 py-0.5 text-[11px] text-[#EEEDE9] focus:outline-none focus:border-[#D97757]"
+            />
+            <button
+              type="submit"
+              className="px-1.5 py-0.5 bg-[#D97757] text-white rounded text-[9px] uppercase font-mono cursor-pointer shrink-0"
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSubfolderParentId(null)}
+              className="px-1.5 py-0.5 bg-[#EEEDE9]/10 text-[#EEEDE9]/70 rounded text-[9px] uppercase font-mono cursor-pointer shrink-0"
+            >
+              X
+            </button>
+          </form>
+        )}
+
+        {/* Nested folders/notes content */}
+        {isExpanded && (
+          <div className="space-y-1">
+            {/* Render nested subfolders recursively */}
+            {subfolders.map(subfolder => renderFolderItem(subfolder, depth + 1))}
+
+            {/* Render nested notes */}
+            {nestedNotes.map((note) => (
+              <div
+                key={note.id}
+                draggable="true"
+                onDragStart={(e) => handleDragStart(e, "note", note.id)}
+                style={{ paddingLeft: `${(depth + 1) * 14 + 18}px` }}
+                className={`flex items-center justify-between group rounded-md py-1.5 text-xs transition-all border border-transparent ${
+                  activeView === "editor" && activeNoteId === note.id
+                    ? "bg-[#EEEDE9]/15 text-[#EEEDE9] font-medium"
+                    : "text-[#EEEDE9]/65 hover:bg-[#EEEDE9]/5 hover:text-[#EEEDE9]"
+                }`}
+              >
+                <button
+                  id={`btn-select-nested-note-${note.id}`}
+                  onClick={() => {
+                    onSelectView("editor");
+                    onSelectNote(note.id);
+                  }}
+                  className="flex-grow flex items-center gap-1.5 text-left truncate cursor-pointer min-w-0"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#E0D4C1]/60 shrink-0" />
+                  <span className="truncate">{note.title || "Untitled Writing"}</span>
+                </button>
+
+                <button
+                  id={`btn-delete-nested-note-${note.id}`}
+                  onClick={() => onDeleteNote(note.id)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer mr-1 shrink-0"
+                  title="Delete Note"
+                >
+                  <Trash className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+
+            {subfolders.length === 0 && nestedNotes.length === 0 && (
+              <div 
+                style={{ paddingLeft: `${(depth + 1) * 14 + 18}px` }}
+                className="text-[10px] text-[#EEEDE9]/30 italic py-1"
+              >
+                Empty vessel
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className={`h-full bg-[#141413] text-[#EEEDE9] flex flex-col border-r border-[#141413]/10 font-sans select-none shrink-0 relative transition-all duration-300 ${
@@ -207,115 +481,43 @@ export default function Sidebar({
         </div>
 
         {/* Folders & Notes Navigation list */}
-        <div className={`space-y-3 p-1.5 rounded-xl transition-all duration-300 ${
-          activeTourStep === 1 
-            ? "ring-2 ring-[#D97757] bg-[#EEEDE9]/5 shadow-[0_0_15px_rgba(217,119,87,0.4)] relative z-50 animate-pulse" 
-            : ""
-        }`}>
-          <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold">
-            Folders & Vessels
+        <div 
+          onDragOver={handleDragOver}
+          onDragEnter={() => setDragOverRootFolders(true)}
+          onDragLeave={() => setDragOverRootFolders(false)}
+          onDrop={handleDropOnRoot}
+          className={`space-y-3 p-1.5 rounded-xl border border-transparent transition-all duration-300 ${
+            activeTourStep === 1 
+              ? "ring-2 ring-[#D97757] bg-[#EEEDE9]/5 shadow-[0_0_15px_rgba(217,119,87,0.4)] relative z-50 animate-pulse" 
+              : ""
+          } ${dragOverRootFolders ? "border-[#D97757]/30 bg-[#EEEDE9]/5" : ""}`}
+        >
+          <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold flex justify-between items-center">
+            <span>Folders & Vessels</span>
+            {dragOverRootFolders && <span className="text-[9px] text-[#D97757] font-mono lowercase">drop to move to root</span>}
           </h2>
 
           <div className="space-y-1">
-            {activeFolders.map((folder) => {
-              const nestedNotes = activeNotes.filter(n => n.folderId === folder.id);
-              const isExpanded = !!expandedFolders[folder.id];
-
-              return (
-                <div key={folder.id} className="space-y-1">
-                  {/* Folder Row */}
-                  <div className="flex items-center justify-between group px-2 py-1.5 rounded-lg hover:bg-[#EEEDE9]/5 transition-all">
-                    <button
-                      id={`btn-folder-toggle-${folder.id}`}
-                      onClick={() => toggleFolder(folder.id)}
-                      className="flex-grow flex items-center gap-2 text-xs font-medium text-[#EEEDE9]/90 text-left transition-colors cursor-pointer"
-                    >
-                      {isExpanded ? (
-                        <ChevronDown className="w-3.5 h-3.5 text-[#EEEDE9]/50" />
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5 text-[#EEEDE9]/50" />
-                      )}
-                      <FolderIcon className="w-4 h-4 text-[#E0D4C1]" />
-                      <span className="truncate">{folder.name}</span>
-                      <span className="text-[10px] font-mono text-[#EEEDE9]/40 bg-[#EEEDE9]/10 px-1.5 rounded-full">
-                        {nestedNotes.length}
-                      </span>
-                    </button>
-
-                    {/* Folder Quick Actions */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        id={`btn-add-note-to-folder-${folder.id}`}
-                        onClick={() => {
-                          onAddNote(folder.id);
-                          if (!isExpanded) toggleFolder(folder.id);
-                        }}
-                        className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-white transition-colors cursor-pointer"
-                        title="New note in folder"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                      <button
-                        id={`btn-delete-folder-${folder.id}`}
-                        onClick={() => onDeleteFolder(folder.id)}
-                        className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-red-400 transition-colors cursor-pointer"
-                        title="Delete Folder"
-                      >
-                        <Trash className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Folder Nested Notes */}
-                  {isExpanded && (
-                    <div className="pl-4 border-l border-[#EEEDE9]/10 ml-3.5 space-y-1 py-0.5">
-                      {nestedNotes.length === 0 ? (
-                        <div className="text-[10px] text-[#EEEDE9]/30 italic px-3 py-1">Empty vessel</div>
-                      ) : (
-                        nestedNotes.map((note) => (
-                          <div
-                            key={note.id}
-                            className={`flex items-center justify-between group rounded-md px-2.5 py-1.5 text-xs transition-all ${
-                              activeView === "editor" && activeNoteId === note.id
-                                ? "bg-[#EEEDE9]/15 text-[#EEEDE9] font-medium"
-                                : "text-[#EEEDE9]/65 hover:bg-[#EEEDE9]/5 hover:text-[#EEEDE9]"
-                            }`}
-                          >
-                            <button
-                              id={`btn-select-nested-note-${note.id}`}
-                              onClick={() => {
-                                onSelectView("editor");
-                                onSelectNote(note.id);
-                              }}
-                              className="flex-grow flex items-center gap-1.5 text-left truncate cursor-pointer"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-[#E0D4C1]/60" />
-                              <span className="truncate">{note.title || "Untitled Writing"}</span>
-                            </button>
-
-                            <button
-                              id={`btn-delete-nested-note-${note.id}`}
-                              onClick={() => onDeleteNote(note.id)}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer"
-                              title="Delete Note"
-                            >
-                              <Trash className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {rootFolders.map((folder) => renderFolderItem(folder, 0))}
+            {activeFolders.length === 0 && (
+              <p className="px-3 py-2 text-[10px] text-[#EEEDE9]/30 italic">No folders created yet.</p>
+            )}
           </div>
         </div>
 
         {/* Standalone Notes Section */}
-        <div className="space-y-2">
-          <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold">
-            Standalone Notes
+        <div 
+          onDragOver={handleDragOver}
+          onDragEnter={() => setDragOverRootNotes(true)}
+          onDragLeave={() => setDragOverRootNotes(false)}
+          onDrop={handleDropOnRoot}
+          className={`space-y-2 p-1.5 rounded-xl border border-transparent transition-all duration-300 ${
+            dragOverRootNotes ? "border-[#D97757]/30 bg-[#EEEDE9]/5" : ""
+          }`}
+        >
+          <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold flex justify-between items-center">
+            <span>Standalone Notes</span>
+            {dragOverRootNotes && <span className="text-[9px] text-[#D97757] font-mono lowercase">drop to un-nest</span>}
           </h2>
 
           <div className="space-y-1">
@@ -325,7 +527,9 @@ export default function Sidebar({
               standaloneNotes.map((note) => (
                 <div
                   key={note.id}
-                  className={`flex items-center justify-between group rounded-lg px-3 py-2 text-xs transition-all ${
+                  draggable="true"
+                  onDragStart={(e) => handleDragStart(e, "note", note.id)}
+                  className={`flex items-center justify-between group rounded-lg px-3 py-2 text-xs transition-all border border-transparent ${
                     activeView === "editor" && activeNoteId === note.id
                       ? "bg-[#EEEDE9]/15 text-[#EEEDE9] font-medium"
                       : "text-[#EEEDE9]/65 hover:bg-[#EEEDE9]/5 hover:text-[#EEEDE9]"
@@ -337,16 +541,16 @@ export default function Sidebar({
                       onSelectView("editor");
                       onSelectNote(note.id);
                     }}
-                    className="flex-grow flex items-center gap-2 text-left truncate cursor-pointer"
+                    className="flex-grow flex items-center gap-2 text-left truncate cursor-pointer min-w-0"
                   >
-                    <FileText className="w-4 h-4 text-[#E0D4C1]/60" />
+                    <FileText className="w-4 h-4 text-[#E0D4C1]/60 shrink-0" />
                     <span className="truncate">{note.title || "Untitled Writing"}</span>
                   </button>
 
                   <button
                     id={`btn-delete-standalone-${note.id}`}
                     onClick={() => onDeleteNote(note.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer shrink-0"
                     title="Delete Note"
                   >
                     <Trash className="w-3.5 h-3.5" />
@@ -378,9 +582,18 @@ export default function Sidebar({
           onClick={() => onSelectView("settings")}
           className="w-full flex items-center gap-2.5 hover:bg-[#EEEDE9]/5 p-1 rounded-lg transition-all cursor-pointer select-none min-w-0 mb-2"
         >
-          <div className="w-8.5 h-8.5 rounded-full bg-[#E0D4C1]/30 flex items-center justify-center border border-[#E0D4C1]/40 text-[#D97757] font-serif font-bold shrink-0">
-            {profile.name ? profile.name[0].toUpperCase() : "S"}
-          </div>
+          {profile.avatarUrl ? (
+            <img 
+              src={profile.avatarUrl} 
+              alt="Pen avatar" 
+              className="w-8.5 h-8.5 rounded-full object-cover border border-[#E0D4C1]/40 shrink-0"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-8.5 h-8.5 rounded-full bg-[#E0D4C1]/30 flex items-center justify-center border border-[#E0D4C1]/40 text-[#D97757] font-serif font-bold shrink-0">
+              {profile.name ? profile.name[0].toUpperCase() : "S"}
+            </div>
+          )}
           <div className="min-w-0 flex-grow">
             <h3 className="text-xs font-serif font-semibold text-[#EEEDE9] truncate">{profile.name || "Scribe Quill"}</h3>
             <p className="text-[9px] font-mono text-[#E0D4C1]/60 truncate">{profile.bio || "Crafting thoughts offline..."}</p>

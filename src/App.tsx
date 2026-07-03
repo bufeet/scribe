@@ -5,6 +5,7 @@ import NoteEditor from "./components/NoteEditor";
 import HistoryPanel from "./components/HistoryPanel";
 import TrashBin from "./components/TrashBin";
 import ProfileSettings from "./components/ProfileSettings";
+import Fireworks from "./components/Fireworks";
 import ProductTour from "./components/ProductTour";
 import LoadingScreen from "./components/LoadingScreen";
 import LandingPage from "./components/LandingPage";
@@ -157,6 +158,7 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [fireworksTrigger, setFireworksTrigger] = useState(0);
   const [activeView, setActiveView] = useState<"editor" | "history" | "trash" | "settings">("editor");
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [showTour, setShowTour] = useState(false);
@@ -278,6 +280,22 @@ export default function App() {
     showNotification("Profile and API configurations updated successfully.", "success");
   };
 
+  const handleImportData = (importedFolders: Folder[], importedNotes: Note[]) => {
+    saveFolders(importedFolders);
+    saveNotes(importedNotes);
+
+    // Find first active note among imported notes to activate
+    const activeList = importedNotes.filter((n) => n.deletedAt === null);
+    if (activeList.length > 0) {
+      setActiveNoteId(activeList[0].id);
+    } else {
+      setActiveNoteId(null);
+    }
+
+    addHistoryLog("note", "Sanctuary state restored from backup", "restore");
+    showNotification("Sanctuary data successfully restored!", "success");
+  };
+
   // Add history record helper
   const addHistoryLog = (
     itemType: "note" | "folder",
@@ -295,16 +313,62 @@ export default function App() {
   };
 
   // Creation logic
-  const handleAddFolder = (name: string) => {
+  const handleAddFolder = (name: string, parentId: string | null = null) => {
     const newFolder: Folder = {
       id: "folder-" + Math.random().toString(36).substr(2, 9),
       name,
       createdAt: new Date().toISOString(),
       deletedAt: null,
+      parentId,
     };
     saveFolders([...folders, newFolder]);
     addHistoryLog("folder", name, "create");
     showNotification(`Folder "${name}" created successfully.`, "success");
+  };
+
+  const handleMoveNote = (noteId: string, folderId: string | null) => {
+    const note = notes.find((n) => n.id === noteId);
+    if (!note) return;
+
+    const updated = notes.map((n) =>
+      n.id === noteId ? { ...n, folderId } : n
+    );
+    saveNotes(updated);
+
+    const folderName = folderId
+      ? folders.find((f) => f.id === folderId)?.name || "Folder"
+      : "Standalone";
+    addHistoryLog("note", `Moved "${note.title || "Untitled"}" to ${folderName}`, "edit");
+    showNotification(`Moved "${note.title || "Untitled"}" to ${folderName}.`, "success");
+  };
+
+  const handleMoveFolder = (folderId: string, parentId: string | null) => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return;
+
+    // Cycle checking
+    if (parentId) {
+      let currentParentId: string | null | undefined = parentId;
+      while (currentParentId) {
+        if (currentParentId === folderId) {
+          showNotification("Cannot move a folder into its own subfolders.", "warning");
+          return;
+        }
+        const parent = folders.find((f) => f.id === currentParentId);
+        currentParentId = parent?.parentId;
+      }
+    }
+
+    const updated = folders.map((f) =>
+      f.id === folderId ? { ...f, parentId } : f
+    );
+    saveFolders(updated);
+
+    const targetName = parentId
+      ? folders.find((f) => f.id === parentId)?.name || "Folder"
+      : "Root";
+    addHistoryLog("folder", `Moved "${folder.name}" to ${targetName}`, "edit");
+    showNotification(`Moved "${folder.name}" to ${targetName}.`, "success");
   };
 
   const handleAddNote = (folderId: string | null = null) => {
@@ -353,29 +417,38 @@ export default function App() {
     const folderToDelete = folders.find((f) => f.id === folderId);
     if (!folderToDelete) return;
 
-    // soft delete folder
+    // Find all descendants recursively
+    const getDescendants = (id: string): string[] => {
+      const children = folders.filter((f) => f.parentId === id);
+      return [id, ...children.flatMap((c) => getDescendants(c.id))];
+    };
+    const folderIdsToDelete = getDescendants(folderId);
+
+    // soft delete folders
     const updatedFolders = folders.map((f) =>
-      f.id === folderId ? { ...f, deletedAt: new Date().toISOString() } : f
+      folderIdsToDelete.includes(f.id) ? { ...f, deletedAt: new Date().toISOString() } : f
     );
     saveFolders(updatedFolders);
 
-    // soft delete all nested notes
+    // soft delete all nested notes for these folders
     const updatedNotes = notes.map((n) =>
-      n.folderId === folderId ? { ...n, deletedAt: new Date().toISOString() } : n
+      n.folderId && folderIdsToDelete.includes(n.folderId)
+        ? { ...n, deletedAt: new Date().toISOString() }
+        : n
     );
     saveNotes(updatedNotes);
 
     // check if active note is now deleted
     if (activeNoteId) {
       const currentActive = notes.find((n) => n.id === activeNoteId);
-      if (currentActive && currentActive.folderId === folderId) {
+      if (currentActive && currentActive.folderId && folderIdsToDelete.includes(currentActive.folderId)) {
         const remainingActive = updatedNotes.filter((n) => n.deletedAt === null);
         setActiveNoteId(remainingActive.length > 0 ? remainingActive[0].id : null);
       }
     }
 
     addHistoryLog("folder", folderToDelete.name, "delete");
-    showNotification(`Folder "${folderToDelete.name}" and its notes moved to Trash.`, "info");
+    showNotification(`Folder "${folderToDelete.name}" and subfolders moved to Trash.`, "info");
   };
 
   // Restores
@@ -406,19 +479,26 @@ export default function App() {
     const folderToRestore = folders.find((f) => f.id === folderId);
     if (!folderToRestore) return;
 
+    // Find all descendants recursively
+    const getDescendants = (id: string): string[] => {
+      const children = folders.filter((f) => f.parentId === id);
+      return [id, ...children.flatMap((c) => getDescendants(c.id))];
+    };
+    const folderIdsToRestore = getDescendants(folderId);
+
     const updatedFolders = folders.map((f) =>
-      f.id === folderId ? { ...f, deletedAt: null } : f
+      folderIdsToRestore.includes(f.id) ? { ...f, deletedAt: null } : f
     );
     saveFolders(updatedFolders);
 
-    // Restore all notes inside this folder too
+    // Restore all notes inside these folders too
     const updatedNotes = notes.map((n) =>
-      n.folderId === folderId ? { ...n, deletedAt: null } : n
+      n.folderId && folderIdsToRestore.includes(n.folderId) ? { ...n, deletedAt: null } : n
     );
     saveNotes(updatedNotes);
 
     addHistoryLog("folder", folderToRestore.name, "restore");
-    showNotification(`Folder "${folderToRestore.name}" and its notes restored.`, "success");
+    showNotification(`Folder "${folderToRestore.name}" and subfolders restored.`, "success");
   };
 
   // Permanent deletions
@@ -435,17 +515,26 @@ export default function App() {
 
   const handlePermanentDeleteFolder = (folderId: string) => {
     const folderToDelete = folders.find((f) => f.id === folderId);
-    const updatedFolders = folders.filter((f) => f.id !== folderId);
+    if (!folderToDelete) return;
+
+    // Find all descendants recursively
+    const getDescendants = (id: string): string[] => {
+      const children = folders.filter((f) => f.parentId === id);
+      return [id, ...children.flatMap((c) => getDescendants(c.id))];
+    };
+    const folderIdsToDelete = getDescendants(folderId);
+
+    const updatedFolders = folders.filter((f) => !folderIdsToDelete.includes(f.id));
     saveFolders(updatedFolders);
 
     // Also permanently delete nested notes
-    const updatedNotes = notes.filter((n) => n.folderId !== folderId);
+    const updatedNotes = notes.filter(
+      (n) => !n.folderId || !folderIdsToDelete.includes(n.folderId)
+    );
     saveNotes(updatedNotes);
 
-    if (folderToDelete) {
-      addHistoryLog("folder", folderToDelete.name, "permanent_delete");
-      showNotification(`Folder "${folderToDelete.name}" permanently deleted.`, "warning");
-    }
+    addHistoryLog("folder", folderToDelete.name, "permanent_delete");
+    showNotification(`Folder "${folderToDelete.name}" and subfolders permanently deleted.`, "warning");
   };
 
   const handleEmptyTrash = () => {
@@ -564,6 +653,8 @@ export default function App() {
               onAddNote={handleAddNote}
               onDeleteNote={handleDeleteNote}
               onDeleteFolder={handleDeleteFolder}
+              onMoveNote={handleMoveNote}
+              onMoveFolder={handleMoveFolder}
               isLoading={isLoadingScreen}
               onShowNotification={showNotification}
             />
@@ -632,6 +723,11 @@ export default function App() {
                       onSave={handleProfileSave}
                       aiUsageCount={aiUsageCount}
                       aiUsageResetTime={aiUsageResetTime}
+                      folders={folders}
+                      notes={notes}
+                      onImportData={handleImportData}
+                      onTriggerFireworks={() => setFireworksTrigger((prev) => prev + 1)}
+                      onShowNotification={showNotification}
                     />
                   )}
                 </motion.div>
@@ -671,6 +767,9 @@ export default function App() {
         ))}
       </AnimatePresence>
     </div>
+
+    {/* Celebratory Minimalist Fireworks Canvas */}
+    <Fireworks triggerCount={fireworksTrigger} />
     </>
   );
 }
