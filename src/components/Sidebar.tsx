@@ -2,9 +2,10 @@ import React, { useState, FormEvent, DragEvent } from "react";
 import { Folder, Note, UserProfile } from "../types";
 import { 
   FolderPlus, FilePlus, ChevronDown, ChevronRight, ChevronLeft, Folder as FolderIcon, 
-  FileText, Trash2, Clock, Settings, Sparkles, Plus, BookOpen, Trash
+  FileText, Trash2, Clock, Settings, Sparkles, Plus, BookOpen, Trash, Globe
 } from "lucide-react";
 import MusicPlayer from "./MusicPlayer";
+import { TranslationDictionary } from "../translations";
 
 interface SidebarProps {
   folders: Folder[];
@@ -14,6 +15,9 @@ interface SidebarProps {
   profile: UserProfile;
   activeTourStep?: number | null;
   isCollapsed: boolean;
+  language: "en" | "zh";
+  onToggleLanguage: () => void;
+  t: TranslationDictionary;
   onToggleCollapse: () => void;
   onSelectView: (view: "editor" | "history" | "trash" | "settings") => void;
   onSelectNote: (noteId: string) => void;
@@ -35,6 +39,9 @@ export default function Sidebar({
   profile,
   activeTourStep = null,
   isCollapsed,
+  language,
+  onToggleLanguage,
+  t,
   onToggleCollapse,
   onSelectView,
   onSelectNote,
@@ -230,7 +237,7 @@ export default function Sidebar({
                 if (!isExpanded) toggleFolder(folder.id);
               }}
               className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-[#D97757] transition-colors cursor-pointer"
-              title="Create nested folder"
+              title={t.createSubfolder}
             >
               <FolderPlus className="w-3 h-3" />
             </button>
@@ -241,7 +248,7 @@ export default function Sidebar({
                 if (!isExpanded) toggleFolder(folder.id);
               }}
               className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-white transition-colors cursor-pointer"
-              title="New note in folder"
+              title={t.newNoteInFolder}
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -249,7 +256,7 @@ export default function Sidebar({
               id={`btn-delete-folder-${folder.id}`}
               onClick={() => onDeleteFolder(folder.id)}
               className="p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/65 hover:text-red-400 transition-colors cursor-pointer"
-              title="Delete Folder"
+              title={t.deleteFolder}
             >
               <Trash className="w-3 h-3" />
             </button>
@@ -266,7 +273,7 @@ export default function Sidebar({
             <input
               autoFocus
               type="text"
-              placeholder="Subfolder name..."
+              placeholder={t.newSubfolderNamePlaceholder}
               value={newSubfolderName}
               onChange={(e) => setNewSubfolderName(e.target.value)}
               className="flex-grow bg-[#141413] border border-[#EEEDE9]/20 rounded px-2 py-0.5 text-[11px] text-[#EEEDE9] focus:outline-none focus:border-[#D97757]"
@@ -275,14 +282,14 @@ export default function Sidebar({
               type="submit"
               className="px-1.5 py-0.5 bg-[#D97757] text-white rounded text-[9px] uppercase font-mono cursor-pointer shrink-0"
             >
-              Create
+              {t.createButton}
             </button>
             <button
               type="button"
               onClick={() => setActiveSubfolderParentId(null)}
               className="px-1.5 py-0.5 bg-[#EEEDE9]/10 text-[#EEEDE9]/70 rounded text-[9px] uppercase font-mono cursor-pointer shrink-0"
             >
-              X
+              {t.cancelButton}
             </button>
           </form>
         )}
@@ -315,14 +322,14 @@ export default function Sidebar({
                   className="flex-grow flex items-center gap-1.5 text-left truncate cursor-pointer min-w-0"
                 >
                   <FileText className="w-3.5 h-3.5 text-[#E0D4C1]/60 shrink-0" />
-                  <span className="truncate">{note.title || "Untitled Writing"}</span>
+                  <span className="truncate">{note.title || (language === "en" ? "Untitled Writing" : "无标题笔记")}</span>
                 </button>
 
                 <button
                   id={`btn-delete-nested-note-${note.id}`}
                   onClick={() => onDeleteNote(note.id)}
                   className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer mr-1 shrink-0"
-                  title="Delete Note"
+                  title={t.deleteNote}
                 >
                   <Trash className="w-3 h-3" />
                 </button>
@@ -334,7 +341,7 @@ export default function Sidebar({
                 style={{ paddingLeft: `${(depth + 1) * 14 + 18}px` }}
                 className="text-[10px] text-[#EEEDE9]/30 italic py-1"
               >
-                Empty vessel
+                {t.emptyVessel}
               </div>
             )}
           </div>
@@ -405,7 +412,7 @@ export default function Sidebar({
             id="input-new-folder-name"
             autoFocus
             type="text"
-            placeholder="Folder name..."
+            placeholder={t.newFolderNamePlaceholder}
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             className="flex-grow bg-[#141413] border border-[#EEEDE9]/20 rounded px-2.5 py-1 text-xs text-[#EEEDE9] focus:outline-none focus:border-[#D97757]"
@@ -415,7 +422,7 @@ export default function Sidebar({
             type="submit"
             className="px-2 py-1 bg-[#D97757] text-white rounded text-[10px] uppercase font-mono cursor-pointer"
           >
-            Create
+            {t.createButton}
           </button>
           <button
             id="btn-cancel-new-folder"
@@ -423,7 +430,7 @@ export default function Sidebar({
             onClick={() => setIsCreatingFolder(false)}
             className="px-2 py-1 bg-[#EEEDE9]/10 text-[#EEEDE9]/70 rounded text-[10px] uppercase font-mono cursor-pointer"
           >
-            X
+            {t.cancelButton}
           </button>
         </form>
       )}
@@ -447,7 +454,7 @@ export default function Sidebar({
             }`}
           >
             <span className="flex items-center gap-2">
-              <Clock className="w-4 h-4" /> Activity Chronicles
+              <Clock className="w-4 h-4" /> {t.history}
             </span>
           </button>
 
@@ -461,7 +468,7 @@ export default function Sidebar({
             }`}
           >
             <span className="flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Trash Sanctuary
+              <Trash2 className="w-4 h-4" /> {t.trash}
             </span>
           </button>
 
@@ -475,7 +482,7 @@ export default function Sidebar({
             }`}
           >
             <span className="flex items-center gap-2">
-              <Settings className="w-4 h-4" /> Sanctuary Settings
+              <Settings className="w-4 h-4" /> {t.settings}
             </span>
           </button>
         </div>
@@ -493,14 +500,14 @@ export default function Sidebar({
           } ${dragOverRootFolders ? "border-[#D97757]/30 bg-[#EEEDE9]/5" : ""}`}
         >
           <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold flex justify-between items-center">
-            <span>Folders & Vessels</span>
-            {dragOverRootFolders && <span className="text-[9px] text-[#D97757] font-mono lowercase">drop to move to root</span>}
+            <span>{t.foldersHeader}</span>
+            {dragOverRootFolders && <span className="text-[9px] text-[#D97757] font-mono lowercase">{t.dragToRoot}</span>}
           </h2>
 
           <div className="space-y-1">
             {rootFolders.map((folder) => renderFolderItem(folder, 0))}
             {activeFolders.length === 0 && (
-              <p className="px-3 py-2 text-[10px] text-[#EEEDE9]/30 italic">No folders created yet.</p>
+              <p className="px-3 py-2 text-[10px] text-[#EEEDE9]/30 italic">{t.noFoldersYet}</p>
             )}
           </div>
         </div>
@@ -516,13 +523,13 @@ export default function Sidebar({
           }`}
         >
           <h2 className="px-3 text-[10px] font-mono uppercase tracking-widest text-[#EEEDE9]/40 font-bold flex justify-between items-center">
-            <span>Standalone Notes</span>
-            {dragOverRootNotes && <span className="text-[9px] text-[#D97757] font-mono lowercase">drop to un-nest</span>}
+            <span>{t.standaloneHeader}</span>
+            {dragOverRootNotes && <span className="text-[9px] text-[#D97757] font-mono lowercase">{t.dragToUnnest}</span>}
           </h2>
 
           <div className="space-y-1">
             {standaloneNotes.length === 0 ? (
-              <p className="px-3 py-2 text-[10px] text-[#EEEDE9]/30 italic">No free-floating notes.</p>
+              <p className="px-3 py-2 text-[10px] text-[#EEEDE9]/30 italic">{t.noNotesYet}</p>
             ) : (
               standaloneNotes.map((note) => (
                 <div
@@ -544,14 +551,14 @@ export default function Sidebar({
                     className="flex-grow flex items-center gap-2 text-left truncate cursor-pointer min-w-0"
                   >
                     <FileText className="w-4 h-4 text-[#E0D4C1]/60 shrink-0" />
-                    <span className="truncate">{note.title || "Untitled Writing"}</span>
+                    <span className="truncate">{note.title || (language === "en" ? "Untitled Writing" : "无标题笔记")}</span>
                   </button>
 
                   <button
                     id={`btn-delete-standalone-${note.id}`}
                     onClick={() => onDeleteNote(note.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#EEEDE9]/10 text-[#EEEDE9]/55 hover:text-red-400 transition-all cursor-pointer shrink-0"
-                    title="Delete Note"
+                    title={t.deleteNote}
                   >
                     <Trash className="w-3.5 h-3.5" />
                   </button>
@@ -580,7 +587,7 @@ export default function Sidebar({
         <div 
           id="btn-sidebar-profile"
           onClick={() => onSelectView("settings")}
-          className="w-full flex items-center gap-2.5 hover:bg-[#EEEDE9]/5 p-1 rounded-lg transition-all cursor-pointer select-none min-w-0 mb-2"
+          className="w-full flex items-center gap-2.5 hover:bg-[#EEEDE9]/5 p-1 rounded-lg transition-all cursor-pointer select-none min-w-0"
         >
           {profile.avatarUrl ? (
             <img 
@@ -595,13 +602,30 @@ export default function Sidebar({
             </div>
           )}
           <div className="min-w-0 flex-grow">
-            <h3 className="text-xs font-serif font-semibold text-[#EEEDE9] truncate">{profile.name || "Scribe Quill"}</h3>
-            <p className="text-[9px] font-mono text-[#E0D4C1]/60 truncate">{profile.bio || "Crafting thoughts offline..."}</p>
+            <h3 className="text-xs font-serif font-semibold text-[#EEEDE9] truncate">{profile.name || (language === "en" ? "Scribe Quill" : "笔墨墨客")}</h3>
+            <p className="text-[9px] font-mono text-[#E0D4C1]/60 truncate">{profile.bio || (language === "en" ? "Crafting thoughts offline..." : "离线记录创作思绪...")}</p>
           </div>
         </div>
 
+        {/* Scribe International Language Switch Button */}
+        <button
+          id="btn-toggle-language"
+          type="button"
+          onClick={onToggleLanguage}
+          className="w-full mt-2.5 flex items-center justify-between gap-2 bg-[#EEEDE9]/5 hover:bg-[#EEEDE9]/10 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer select-none text-[10px] font-mono text-[#E0D4C1]/70 hover:text-[#EEEDE9] border border-[#EEEDE9]/5"
+          title="Scribe International - Change Language / 切换语言"
+        >
+          <div className="flex items-center gap-1.5 truncate">
+            <Globe className="w-3.5 h-3.5 text-[#D97757]" />
+            <span>Scribe International</span>
+          </div>
+          <span className="font-bold text-[#D97757] bg-[#D97757]/15 px-1.5 py-0.5 rounded text-[9px]">
+            {language === "en" ? "ENGLISH" : "中文"}
+          </span>
+        </button>
+
         {/* Creator Credits */}
-        <div className="pt-2 text-center text-[9px] font-mono text-[#EEEDE9]/35 border-t border-[#EEEDE9]/5 flex flex-col gap-0.5">
+        <div className="pt-2 mt-2 text-center text-[9px] font-mono text-[#EEEDE9]/35 border-t border-[#EEEDE9]/5 flex flex-col gap-0.5">
           <div>All credits belong to <a href="https://linkedin.com/in/joalx" target="_blank" rel="noopener noreferrer" className="text-[#D97757] hover:underline hover:text-[#c46546] font-semibold">João Leite (@joalx)</a></div>
         </div>
       </div>

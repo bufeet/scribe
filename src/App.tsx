@@ -9,6 +9,8 @@ import Fireworks from "./components/Fireworks";
 import ProductTour from "./components/ProductTour";
 import LoadingScreen from "./components/LoadingScreen";
 import LandingPage from "./components/LandingPage";
+import LanguageSweep from "./components/LanguageSweep";
+import { translations } from "./translations";
 import { motion, AnimatePresence } from "motion/react";
 import { Compass, Sparkles, BookOpen, Feather, AlertCircle, AlertTriangle, Check, X, Info } from "lucide-react";
 
@@ -88,6 +90,12 @@ interface AppNotification {
 }
 
 export default function App() {
+  const [language, setLanguage] = useState<"en" | "zh">(() => {
+    return (localStorage.getItem("scribe_language") as "en" | "zh") || "en";
+  });
+  const [isLanguageSweeping, setIsLanguageSweeping] = useState(false);
+  const t = translations[language];
+
   const [folders, setFolders] = useState<Folder[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [aiUsageCount, setAiUsageCount] = useState<number>(() => {
@@ -277,7 +285,39 @@ export default function App() {
   const handleProfileSave = () => {
     localStorage.setItem("scribe_profile", JSON.stringify(profile));
     addHistoryLog("note", "Sanctuary Settings updated", "edit");
-    showNotification("Profile and API configurations updated successfully.", "success");
+  };
+
+  const handleToggleLanguage = () => {
+    const nextLang = language === "en" ? "zh" : "en";
+    setIsLanguageSweeping(true);
+    setLanguage(nextLang);
+    localStorage.setItem("scribe_language", nextLang);
+    
+    // Auto save settings
+    localStorage.setItem("scribe_profile", JSON.stringify(profile));
+
+    // Show localized notification immediately in the newly selected language
+    const msg = nextLang === "en" 
+      ? "Language switched to English, automatically saved." 
+      : "语言已切换为中文，自适应保存。";
+    showNotification(msg, "info");
+  };
+
+  const handleImportSingleNote = (title: string, content: string) => {
+    const newNote: Note = {
+      id: "note-" + Math.random().toString(36).substr(2, 9),
+      title,
+      content,
+      folderId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null,
+    };
+    const updatedNotes = [newNote, ...notes];
+    saveNotes(updatedNotes);
+    setActiveNoteId(newNote.id);
+    setActiveView("editor");
+    addHistoryLog("note", `Imported note: ${title}`, "create");
   };
 
   const handleImportData = (importedFolders: Folder[], importedNotes: Note[]) => {
@@ -293,7 +333,6 @@ export default function App() {
     }
 
     addHistoryLog("note", "Sanctuary state restored from backup", "restore");
-    showNotification("Sanctuary data successfully restored!", "success");
   };
 
   // Add history record helper
@@ -646,6 +685,9 @@ export default function App() {
               profile={profile}
               activeTourStep={tourStep}
               isCollapsed={isSidebarCollapsed}
+              language={language}
+              onToggleLanguage={handleToggleLanguage}
+              t={t}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onSelectView={setActiveView}
               onSelectNote={setActiveNoteId}
@@ -701,6 +743,8 @@ export default function App() {
                     <HistoryPanel
                       history={history}
                       onClearHistory={handleClearHistory}
+                      language={language}
+                      t={t}
                     />
                   )}
 
@@ -713,6 +757,8 @@ export default function App() {
                       onPermanentDeleteNote={handlePermanentDeleteNote}
                       onPermanentDeleteFolder={handlePermanentDeleteFolder}
                       onEmptyTrash={handleEmptyTrash}
+                      language={language}
+                      t={t}
                     />
                   )}
 
@@ -726,8 +772,11 @@ export default function App() {
                       folders={folders}
                       notes={notes}
                       onImportData={handleImportData}
+                      onImportSingleNote={handleImportSingleNote}
                       onTriggerFireworks={() => setFireworksTrigger((prev) => prev + 1)}
                       onShowNotification={showNotification}
+                      language={language}
+                      t={t}
                     />
                   )}
                 </motion.div>
@@ -770,6 +819,9 @@ export default function App() {
 
     {/* Celebratory Minimalist Fireworks Canvas */}
     <Fireworks triggerCount={fireworksTrigger} />
+
+    {/* Subtle Language Sweep Effect Overlay */}
+    <LanguageSweep isTriggered={isLanguageSweeping} onFinished={() => setIsLanguageSweeping(false)} />
     </>
   );
 }

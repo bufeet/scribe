@@ -2,13 +2,16 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { HistoryItem } from "../types";
 import { Clock, Filter, FileText, FolderPlus, Trash2, RefreshCw, AlertCircle, Search } from "lucide-react";
+import { TranslationDictionary } from "../translations";
 
 interface HistoryPanelProps {
   history: HistoryItem[];
   onClearHistory: () => void;
+  language: "en" | "zh";
+  t: TranslationDictionary;
 }
 
-export default function HistoryPanel({ history, onClearHistory }: HistoryPanelProps) {
+export default function HistoryPanel({ history, onClearHistory, language, t }: HistoryPanelProps) {
   const [filter, setFilter] = useState<"all" | "note" | "folder">("all");
   const [search, setSearch] = useState("");
 
@@ -65,9 +68,26 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
   };
 
   const getActionLabel = (type: string, itemType: string) => {
+    if (type === "create" && itemType === "note") return t.actionLabelCreateNote;
+    if (type === "create" && itemType === "folder") return t.actionLabelCreateFolder;
+    if (type === "edit" && itemType === "note") return t.actionLabelEditNote;
+    if (type === "edit" && itemType === "folder") return t.actionLabelEditFolder;
+    if (type === "delete" && itemType === "note") return t.actionLabelDeleteNote;
+    if (type === "delete" && itemType === "folder") return t.actionLabelDeleteFolder;
+    if (type === "restore" && itemType === "note") return t.actionLabelRestoreNote;
+    if (type === "restore" && itemType === "folder") return t.actionLabelRestoreFolder;
+    if (type === "permanent_delete" && itemType === "note") return t.actionLabelPermanentDeleteNote;
+    if (type === "permanent_delete" && itemType === "folder") return t.actionLabelPermanentDeleteFolder;
+
     const typeUpper = type.replace("_", " ").toUpperCase();
     const itemUpper = itemType.toUpperCase();
     return `${typeUpper} ${itemUpper}`;
+  };
+
+  const filterLabelMap: Record<"all" | "note" | "folder", string> = {
+    all: language === "en" ? "All" : "全部",
+    note: language === "en" ? "Note" : "笔记",
+    folder: language === "en" ? "Folder" : "文件夹",
   };
 
   return (
@@ -75,10 +95,10 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-serif font-semibold text-[#141413] dark:text-[#ECEAE4] mb-2 flex items-center gap-2.5">
-            <Clock className="w-8 h-8 text-[#D97757]" /> Activity Chronicles
+            <Clock className="w-8 h-8 text-[#D97757]" /> {t.historyTitle}
           </h1>
           <p className="text-sm text-[#141413]/60 dark:text-[#ECEAE4]/60">
-            A beautiful, quiet record of every word drafted and vessel created in your creative sanctuary.
+            {t.historySubtitle}
           </p>
         </div>
 
@@ -88,7 +108,7 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
             onClick={onClearHistory}
             className="px-3.5 py-1.5 border border-[#E0D4C1] dark:border-[#33322E] hover:bg-[#E0D4C1] dark:hover:bg-[#33322E] text-[#141413]/70 dark:text-[#ECEAE4]/70 hover:text-[#141413] dark:hover:text-[#ECEAE4] transition-all rounded-lg text-xs font-mono cursor-pointer"
           >
-            Clear Chronicles
+            {t.clearHistoryBtn}
           </button>
         )}
       </div>
@@ -96,8 +116,8 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
       {history.length === 0 ? (
         <div className="border border-dashed border-[#E0D4C1] dark:border-[#33322E] bg-[#EEEDE9]/40 dark:bg-[#252421]/30 p-12 rounded-xl text-center">
           <Clock className="w-12 h-12 text-[#E0D4C1] dark:text-[#33322E] mx-auto mb-4 animate-pulse" />
-          <p className="text-base font-serif font-medium text-[#141413]/70 dark:text-[#ECEAE4]/70">The Chronicles are quiet</p>
-          <p className="text-xs text-[#141413]/40 dark:text-[#ECEAE4]/40 mt-1">Actions you take on notes and folders will appear here.</p>
+          <p className="text-base font-serif font-medium text-[#141413]/70 dark:text-[#ECEAE4]/70">{t.emptyHistoryTitle}</p>
+          <p className="text-xs text-[#141413]/40 dark:text-[#ECEAE4]/40 mt-1">{t.emptyHistoryDesc}</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -111,7 +131,7 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search Chronicles..."
+                placeholder={t.searchHistoryPlaceholder}
                 className="w-full bg-[#EEEDE9] dark:bg-[#151514] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg pl-9 pr-4 py-1.5 text-xs text-[#141413] dark:text-[#ECEAE4] focus:outline-none focus:border-[#D97757]"
               />
             </div>
@@ -124,13 +144,13 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
                   key={opt}
                   id={`btn-filter-history-${opt}`}
                   onClick={() => setFilter(opt)}
-                  className={`px-3 py-1 rounded-md text-xs font-mono capitalize transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-md text-xs font-mono transition-all cursor-pointer ${
                     filter === opt
                       ? "bg-[#D97757] text-white"
                       : "bg-[#EEEDE9] dark:bg-[#1E1E1C] text-[#141413]/60 dark:text-[#ECEAE4]/60 hover:text-[#141413] dark:hover:text-[#ECEAE4] hover:bg-[#E0D4C1]/30 dark:hover:bg-[#33322E]/30"
                   }`}
                 >
-                  {opt}
+                  {filterLabelMap[opt]}
                 </button>
               ))}
             </div>
@@ -138,12 +158,12 @@ export default function HistoryPanel({ history, onClearHistory }: HistoryPanelPr
 
           {/* Timeline */}
           {filteredHistory.length === 0 ? (
-            <p className="text-center py-8 text-xs text-[#141413]/50 dark:text-[#ECEAE4]/50 italic">No chronicles match your filters.</p>
+            <p className="text-center py-8 text-xs text-[#141413]/50 dark:text-[#ECEAE4]/50 italic">{t.noHistoryMatches}</p>
           ) : (
             <div className="relative border-l-2 border-[#E0D4C1] dark:border-[#33322E] ml-4 pl-6 space-y-6">
               <AnimatePresence initial={false}>
                 {filteredHistory.map((item, idx) => {
-                  const dateStr = new Date(item.timestamp).toLocaleString("en-US", {
+                  const dateStr = new Date(item.timestamp).toLocaleString(language === "en" ? "en-US" : "zh-CN", {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
