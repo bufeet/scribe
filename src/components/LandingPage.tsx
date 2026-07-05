@@ -6,7 +6,7 @@ import {
   Linkedin
 } from "lucide-react";
 
-const joaoAvatar = "./assets/images/avatar.jpg";
+const joaoAvatar = "/src/assets/images/avatar.jpg";
 
 interface LandingPageProps {
   onLaunchApp: () => void;
