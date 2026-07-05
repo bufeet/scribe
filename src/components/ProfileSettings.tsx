@@ -3,7 +3,8 @@ import { motion } from "motion/react";
 import { UserProfile, Folder, Note } from "../types";
 import { 
   User, AlignLeft, Cpu, Key, CheckCircle, AlertCircle, RefreshCw, 
-  Camera, Database, DownloadCloud, UploadCloud, Sparkles, Check, FileText, Globe
+  Camera, Database, DownloadCloud, UploadCloud, Sparkles, Check, FileText, Globe,
+  Lock
 } from "lucide-react";
 import { TranslationDictionary } from "../translations";
 import { encryptData, decryptData } from "../lib/cipher";
@@ -14,7 +15,7 @@ interface ProfileSettingsProps {
   onChange: (updated: UserProfile) => void;
   onSave: () => void;
   aiUsageCount: number;
-  aiUsageResetTime: string | null;
+  aiUsageResetTime: string | null;a
   folders: Folder[];
   notes: Note[];
   onImportData: (folders: Folder[], notes: Note[]) => void;
@@ -42,6 +43,10 @@ export default function ProfileSettings({
 }: ProfileSettingsProps) {
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const isLimitLocked = aiUsageCount >= (profile.aiUsageLimit ?? 10) && 
+    aiUsageResetTime !== null && 
+    new Date(aiUsageResetTime).getTime() > Date.now();
 
   // Drag & drop state managers
   const [isDragOverAvatar, setIsDragOverAvatar] = useState(false);
@@ -459,13 +464,17 @@ export default function ProfileSettings({
             </div>
           </div>
 
-          <div className="sm:pl-4 sm:pt-2">
+          <div className="sm:pl-28">
             <h2 className="text-xl font-serif font-bold text-[#141413] dark:text-[#ECEAE4] flex items-center gap-1.5">
               {profile.name || (language === "en" ? "Scribe Quill" : "笔墨墨客")}
             </h2>
             <p className="text-xs text-[#141413]/60 dark:text-[#ECEAE4]/60 italic font-sans max-w-sm mt-0.5">
               {profile.bio || (language === "en" ? "drafting reflections on memory, beauty, and silence." : "起草关于记忆、美与沉静的感悟。")}
             </p>
+          </div>
+
+          <div className="text-[10px] font-mono text-[#141413]/40 dark:text-[#ECEAE4]/40 self-start sm:self-auto italic bg-[#E0D4C1]/30 dark:bg-[#1C1C1A]/60 px-2 py-0.5 rounded">
+            {t.dragHint}
           </div>
         </div>
 
@@ -590,7 +599,12 @@ export default function ProfileSettings({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
               <div>
                 <label className="block text-xs font-mono tracking-wider text-[#141413]/60 dark:text-[#ECEAE4]/60 uppercase mb-2 flex items-center gap-1.5">
-                  {t.aiHourlyLimitLabel}
+                  <span>{t.aiHourlyLimitLabel}</span>
+                  {isLimitLocked && (
+                    <span className="text-[9px] text-red-500 font-bold uppercase tracking-wider flex items-center gap-0.5 ml-auto">
+                      <Lock className="w-3 h-3 animate-pulse" /> Locked
+                    </span>
+                  )}
                 </label>
                 <input
                   id="settings-ai-limit"
@@ -598,15 +612,29 @@ export default function ProfileSettings({
                   min="1"
                   max="100"
                   value={profile.aiUsageLimit ?? 10}
+                  disabled={isLimitLocked}
                   onChange={(e) => {
+                    if (isLimitLocked) return;
                     const val = parseInt(e.target.value, 10);
                     onChange({ ...profile, aiUsageLimit: isNaN(val) ? 10 : val });
                   }}
-                  className="w-full bg-[#EEEDE9] dark:bg-[#151514] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-3 py-2 text-sm text-[#141413] dark:text-[#ECEAE4] focus:outline-none focus:border-[#D97757] transition-colors"
+                  className={`w-full bg-[#EEEDE9] dark:bg-[#151514] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-3 py-2 text-sm text-[#141413] dark:text-[#ECEAE4] focus:outline-none focus:border-[#D97757] transition-colors ${
+                    isLimitLocked ? "opacity-50 cursor-not-allowed bg-red-500/5" : ""
+                  }`}
                 />
-                <p className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 mt-1 font-mono">
-                  {t.aiHourlyLimitDesc}
-                </p>
+                {isLimitLocked ? (
+                  <p className="text-[10px] text-red-500/80 dark:text-red-400/80 mt-1.5 font-sans leading-relaxed">
+                    {language === "en" ? (
+                      "Your creative limit has been reached. This setting is locked to prevent bypasses during the active 1-hour cooldown."
+                    ) : (
+                      "您已达到创作额度上限。该设置已被锁定，以防在1小时冷却期内规避限制。"
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 mt-1 font-mono">
+                    {t.aiHourlyLimitDesc}
+                  </p>
+                )}
               </div>
 
               <div className="bg-[#E0D4C1]/30 dark:bg-[#1C1C1A]/50 p-3 rounded-lg border border-[#E0D4C1]/50 dark:border-[#33322E] flex flex-col justify-between">

@@ -300,6 +300,30 @@ export default function App() {
   };
 
   const handleProfileSave = () => {
+    const savedProfileStr = localStorage.getItem("scribe_profile");
+    if (savedProfileStr) {
+      const savedProfile = JSON.parse(savedProfileStr);
+      const oldLimit = savedProfile.aiUsageLimit ?? 10;
+      const newLimit = profile.aiUsageLimit ?? 10;
+      
+      const isCooldownActive = aiUsageCount >= oldLimit && 
+        aiUsageResetTime !== null && 
+        new Date(aiUsageResetTime).getTime() > Date.now();
+        
+      if (isCooldownActive && newLimit !== oldLimit) {
+        const revertedProfile = { ...profile, aiUsageLimit: oldLimit };
+        setProfile(revertedProfile);
+        localStorage.setItem("scribe_profile", JSON.stringify(revertedProfile));
+        showNotification(
+          language === "en" 
+            ? "You cannot modify your hourly usage limit during an active cooldown." 
+            : "冷却期内无法修改每小时的使用限制。", 
+          "error"
+        );
+        return;
+      }
+    }
+
     localStorage.setItem("scribe_profile", JSON.stringify(profile));
     addHistoryLog("note", "Sanctuary Settings updated", "edit");
   };
