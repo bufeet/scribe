@@ -5,8 +5,9 @@ import { Note, UserProfile } from "../types";
 import { 
   Sparkles, Check, RefreshCw, HelpCircle, FileText, 
   Calendar, Compass, Feather, Download, ChevronDown,
-  Bold, Italic, Underline, Link, List, ListOrdered
+  Bold, Italic, Underline, Link, List, ListOrdered, X
 } from "lucide-react";
+import { translations, TranslationDictionary } from "../translations";
 
 interface NoteEditorProps {
   note: Note;
@@ -14,9 +15,55 @@ interface NoteEditorProps {
   onUpdateNote: (updated: Note) => void;
   onAddHistory: (itemType: "note" | "folder", itemName: string, type: "create" | "edit" | "delete" | "restore" | "permanent_delete") => void;
   onCheckAndIncrementUsage: () => boolean;
+  onSelectView?: (view: "editor" | "history" | "trash" | "settings") => void;
+  language?: "en" | "zh";
+  t?: TranslationDictionary;
 }
 
-export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, onCheckAndIncrementUsage }: NoteEditorProps) {
+const splitAtFirstUnquotedTag = (text: string, tag: string): [string, string] | null => {
+  let index = text.indexOf(tag);
+  while (index !== -1) {
+    // Check if the tag is inside quotes by parsing quote states from the start up to the tag index
+    let inQuote = false;
+    for (let i = 0; i < index; i++) {
+      if (text[i] === '"') {
+        inQuote = !inQuote;
+      } else if (text[i] === '“') {
+        inQuote = true;
+      } else if (text[i] === '”') {
+        inQuote = false;
+      }
+    }
+
+    const beforeChar = index > 0 ? text[index - 1] : "";
+    const afterChar = index + tag.length < text.length ? text[index + tag.length] : "";
+    
+    const isPrecededByQuote = beforeChar === '"' || beforeChar === '“';
+    const isFollowedByQuote = afterChar === '"' || afterChar === '”';
+    
+    const isQuoted = inQuote || isPrecededByQuote || isFollowedByQuote;
+    
+    if (!isQuoted) {
+      const preceding = text.substring(0, index);
+      const trailing = text.substring(index + tag.length);
+      return [preceding, trailing];
+    }
+    index = text.indexOf(tag, index + 1);
+  }
+  return null;
+};
+
+export default function NoteEditor({ 
+  note, 
+  profile, 
+  onUpdateNote, 
+  onAddHistory, 
+  onCheckAndIncrementUsage,
+  onSelectView,
+  language = "en",
+  t
+}: NoteEditorProps) {
+  const activeT = t || translations[language || "en"];
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [editorFocused, setEditorFocused] = useState(false);
@@ -24,6 +71,34 @@ export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [showMuseModal, setShowMuseModal] = useState(false);
+  const [hasDismissedMuse, setHasDismissedMuse] = useState(false);
+
+  // Monitor whether to show the Muse warning modal
+  useEffect(() => {
+    const hasNoKey = !profile.apiKey || profile.apiKey.trim() === "";
+    const hasTag = splitAtFirstUnquotedTag(note.content, "@idea") !== null || splitAtFirstUnquotedTag(note.content, "@fix") !== null;
+    
+    if (hasNoKey && hasTag && !hasDismissedMuse) {
+      setShowMuseModal(true);
+    } else {
+      setShowMuseModal(false);
+    }
+  }, [note.content, profile.apiKey, hasDismissedMuse]);
+
+  // Reset dismissal state if the user deletes the tags completely
+  useEffect(() => {
+    const hasTag = splitAtFirstUnquotedTag(note.content, "@idea") !== null || splitAtFirstUnquotedTag(note.content, "@fix") !== null;
+    if (!hasTag) {
+      setHasDismissedMuse(false);
+    }
+  }, [note.content]);
+
+  // Reset dismissal state on note switch
+  useEffect(() => {
+    setHasDismissedMuse(false);
+  }, [note.id]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -177,25 +252,6 @@ export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, 
     }, 1200); // 1.2 seconds of silence triggers the AI complete! Very natural writing flow.
   };
 
-  const splitAtFirstUnquotedTag = (text: string, tag: string): [string, string] | null => {
-    let index = text.indexOf(tag);
-    while (index !== -1) {
-      const beforeChar = index > 0 ? text[index - 1] : "";
-      const afterChar = index + tag.length < text.length ? text[index + tag.length] : "";
-      
-      const isPrecededByQuote = beforeChar === '"' || beforeChar === '“';
-      const isFollowedByQuote = afterChar === '"' || afterChar === '”';
-      
-      if (!(isPrecededByQuote && isFollowedByQuote)) {
-        const preceding = text.substring(0, index);
-        const trailing = text.substring(index + tag.length);
-        return [preceding, trailing];
-      }
-      index = text.indexOf(tag, index + 1);
-    }
-    return null;
-  };
-
   const checkForAiTags = async (content: string) => {
     // 1. Check for unquoted @idea
     const ideaSplit = splitAtFirstUnquotedTag(content, "@idea");
@@ -215,6 +271,12 @@ export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, 
   };
 
   const triggerAiCompletion = async (tag: "@idea" | "@fix", precedingText: string, trailingText: string) => {
+    // If no API key, do not proceed with API call
+    if (!profile.apiKey || profile.apiKey.trim() === "") {
+      setAiError(language === "en" ? "API Key is required to summon the Muse." : "配置 API 密钥后方能唤起缪斯。");
+      return;
+    }
+
     // Enforce usage limits first
     const isAllowed = onCheckAndIncrementUsage();
     if (!isAllowed) {
@@ -273,18 +335,7 @@ export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, 
     }
   };
 
-  // Explicit helper triggers
-  const forceTriggerIdea = () => {
-    const currentVal = textareaRef.current?.value || "";
-    triggerAiCompletion("@idea", currentVal, "");
-  };
-
-  const forceTriggerFix = () => {
-    const currentVal = textareaRef.current?.value || "";
-    // If selecting some text or just correcting everything, let's treat the whole text as trailing
-    triggerAiCompletion("@fix", "", currentVal);
-  };
-
+  // Formatting and toolbar options
   const applyFormatting = (format: "bold" | "italic" | "underline" | "link" | "ul" | "ol") => {
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -459,36 +510,96 @@ export default function NoteEditor({ note, profile, onUpdateNote, onAddHistory, 
         className="text-3xl sm:text-4xl font-serif font-bold bg-transparent border-none outline-none text-[#141413] dark:text-[#ECEAE4] mb-4 placeholder-gray-400 dark:placeholder-gray-600 w-full focus:ring-0"
       />
 
-      {/* Creative sound boarding helpers bar */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-2 rounded-xl text-xs font-mono transition-colors duration-300">
-        <Feather className="w-3.5 h-3.5 text-[#D97757] shrink-0 ml-1.5" />
-        <span className="text-[#141413]/60 dark:text-[#ECEAE4]/60 mr-2">Shortcuts:</span>
-        <button
-          id="btn-shortcut-idea"
-          onClick={forceTriggerIdea}
-          className="px-2.5 py-1 rounded bg-[#E0D4C1]/60 hover:bg-[#D97757]/10 hover:text-[#D97757] dark:bg-[#33322E]/80 dark:hover:bg-[#D97757]/20 text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center gap-1.5 cursor-pointer"
-          title="Completes the preceding text"
-        >
-          <span>Type <span className="font-bold">@idea</span></span>
-        </button>
-        <button
-          id="btn-shortcut-fix"
-          onClick={forceTriggerFix}
-          className="px-2.5 py-1 rounded bg-[#E0D4C1]/60 hover:bg-[#D97757]/10 hover:text-[#D97757] dark:bg-[#33322E]/80 dark:hover:bg-[#D97757]/20 text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center gap-1.5 cursor-pointer"
-          title="Fix spelling and grammar"
-        >
-          <span>Type <span className="font-bold">@fix</span></span>
-        </button>
+      {/* Muse Whisper Modal */}
+      <AnimatePresence>
+        {showMuseModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop: dimming and slightly blurring */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setHasDismissedMuse(true)}
+              className="absolute inset-0 bg-[#0c0c0b]/40 dark:bg-[#000000]/60 backdrop-blur-[4px]"
+            />
 
-        <div className="flex-grow" />
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="relative w-full max-w-lg bg-[#FAF9F5] dark:bg-[#1A1A18] border border-[#E0D4C1] dark:border-[#33322E] rounded-2xl shadow-2xl p-6 overflow-hidden z-10 transition-colors duration-300"
+            >
+              {/* Close Button */}
+              <button
+                id="btn-close-muse-modal"
+                onClick={() => setHasDismissedMuse(true)}
+                className="absolute top-4 right-4 p-1.5 rounded-lg text-[#141413]/40 dark:text-[#ECEAE4]/40 hover:bg-[#EEEDE9] dark:hover:bg-[#252421] hover:text-[#141413] dark:hover:text-[#ECEAE4] transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
 
-        <div className="text-[10px] text-[#141413]/55 dark:text-[#ECEAE4]/55 flex items-center gap-1 mr-1">
-          <HelpCircle className="w-3 h-3 text-[#D97757]/80" /> Use tags anywhere inline to summon the Muse
+              {/* Content */}
+              <div className="flex flex-col sm:flex-row gap-4 items-start pt-2">
+                <div className="w-12 h-12 rounded-2xl bg-[#D97757]/10 flex items-center justify-center text-[#D97757] shrink-0">
+                  <Sparkles className="w-6 h-6 animate-pulse" />
+                </div>
+                <div className="space-y-4 flex-grow min-w-0">
+                  <div>
+                    <h3 className="text-lg font-serif font-bold text-[#141413] dark:text-[#ECEAE4] leading-snug">
+                      {activeT.museWhisperTitle}
+                    </h3>
+                    <p className="text-xs text-[#141413]/70 dark:text-[#ECEAE4]/70 mt-1.5 leading-relaxed">
+                      {activeT.museWhisperDesc}
+                    </p>
+                  </div>
+
+                  <div className="text-xs italic text-[#141413]/70 dark:text-[#ECEAE4]/70 bg-[#EEEDE9]/60 dark:bg-[#252421]/60 p-4 rounded-xl border border-[#E0D4C1]/40 dark:border-[#33322E]/40 leading-relaxed font-sans">
+                    {activeT.museWhisperMoti}
+                  </div>
+
+                  {onSelectView && (
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        id="btn-muse-modal-close"
+                        onClick={() => setHasDismissedMuse(true)}
+                        className="px-3.5 py-1.5 border border-[#E0D4C1] dark:border-[#33322E] hover:bg-[#EEEDE9] dark:hover:bg-[#252421] text-[#141413]/70 dark:text-[#ECEAE4]/70 rounded-lg text-xs font-mono transition-all cursor-pointer"
+                      >
+                        {language === "en" ? "Dismiss" : "忽略"}
+                      </button>
+                      <button
+                        id="btn-muse-modal-configure"
+                        onClick={() => {
+                          setHasDismissedMuse(true);
+                          onSelectView("settings");
+                        }}
+                        className="px-4 py-1.5 bg-[#D97757] hover:bg-[#c46546] text-[#EEEDE9] rounded-lg text-xs font-mono font-medium shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>{activeT.museSettingsBtn}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Shortcut Tip shown when API key is set */}
+      {profile.apiKey && profile.apiKey.trim() !== "" && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-2.5 rounded-xl text-xs font-mono transition-colors duration-300">
+          <Feather className="w-3.5 h-3.5 text-[#D97757] shrink-0 ml-1.5" />
+          <span className="text-[#141413]/70 dark:text-[#ECEAE4]/70">
+            {activeT.museShortcutsTip}
+          </span>
         </div>
-      </div>
+      )}
 
       {/* Text Editing Toolbar */}
       <div className="flex flex-wrap items-center gap-1.5 mb-4 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-1.5 rounded-xl text-xs font-mono transition-colors duration-300">
+        <span className="text-[#141413]/60 dark:text-[#ECEAE4]/60 mr-1.5 ml-2">Format:</span>
         <button
           id="btn-format-bold"
           onClick={() => applyFormatting("bold")}

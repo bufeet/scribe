@@ -123,6 +123,11 @@ export interface TranslationDictionary {
   actionLabelRestoreFolder: string;
   actionLabelPermanentDeleteNote: string;
   actionLabelPermanentDeleteFolder: string;
+  museWhisperTitle: string;
+  museWhisperDesc: string;
+  museWhisperMoti: string;
+  museSettingsBtn: string;
+  museShortcutsTip: string;
 }
 
 export const translations: Record<"en" | "zh", TranslationDictionary> = {
@@ -130,7 +135,7 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     appName: "Scribe Creative Sanctuary",
     appSubtitle: "drafting reflections on memory, beauty, and silence.",
     editor: "Editor",
-    history: "Activities",
+    history: "History",
     trash: "Trash",
     settings: "Settings",
     foldersHeader: "Folders & Vessels",
@@ -165,7 +170,7 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     saveAiBtn: "Save AI Engine Config",
     selectedBrainLabel: "Selected Brain",
     customApiKeyLabel: "Custom API Key",
-    customApiKeyPlaceholder: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    customApiKeyPlaceholder: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     activeSystemKey: "Active System Key Found",
     aiHourlyLimitLabel: "AI Hourly Usage Limit",
     aiHourlyLimitDesc: "The sounding board is restricted to this many queries per hour to maintain writing rhythm.",
@@ -251,13 +256,18 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     actionLabelRestoreFolder: "RESTORE FOLDER",
     actionLabelPermanentDeleteNote: "PERMANENT DELETE NOTE",
     actionLabelPermanentDeleteFolder: "PERMANENT DELETE FOLDER",
+    museWhisperTitle: "A Whisper from the Sanctuary Muse",
+    museWhisperDesc: "To awaken Scribe's sounding board (@idea and @fix), please ensure you enter your valid model API key in the Profile Settings.",
+    museWhisperMoti: "These commands are gentle guides along your path—not the authors of your journey. Use them to break blocks or smooth rough drafts, but let the true spirit, raw stories, and brilliant creativity flow from your own mind. The most beautiful pages are the ones written with your heart.",
+    museSettingsBtn: "Configure API Key",
+    museShortcutsTip: "Tip: Type @idea anywhere to extend thoughts, or @fix to correct grammar. Let your own voice lead.",
   },
   zh: {
     appName: "Scribe 创作圣殿",
     appSubtitle: "起草关于记忆、美与沉静的感悟。",
     editor: "编辑器",
-    history: "活动",
-    trash: "垃圾",
+    history: "垃圾",
+    trash: "废纸篓",
     settings: "设置",
     foldersHeader: "文件夹与容器",
     standaloneHeader: "独立笔记",
@@ -290,8 +300,8 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     saveProfileBtn: "保存个人资料设置",
     saveAiBtn: "保存 AI 引擎配置",
     selectedBrainLabel: "已选智能脑库",
-    customApiKeyLabel: "自定义 API 密钥（Gemini 可选）",
-    customApiKeyPlaceholder: "留空则默认使用服务器提供的安全缺省密钥...",
+    customApiKeyLabel: "自定义 API 密钥",
+    customApiKeyPlaceholder: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     activeSystemKey: "已启用系统默认密钥",
     aiHourlyLimitLabel: "每小时 AI 使用上限",
     aiHourlyLimitDesc: "为了维持平稳的写作节奏，创意回音壁每小时的查询受限于此数值。",
@@ -309,8 +319,8 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     importRecoveryTitle: "导入圣殿恢复",
     importRecoveryDesc: "上传或拖入加密的 Scribe 备份文件，以解密并完整恢复您的创作圣殿。",
     importRecoveryPlaceholder: "点击或拖拽 JSON 备份到此处",
-    importDocsTitle: "导入文档 (.txt, .md)",
-    importDocsDesc: "将任何纯文本或 Markdown 草稿直接作为新笔记导入当前工作区。不适用于备份。",
+    importDocsTitle: "导入文档",
+    importDocsDesc: "将任意纯文本或 Markdown 草稿直接导入当前工作区作为新笔记。此功能不适用于备份。",
     importDocsPlaceholder: "点击或拖拽 文件到此处",
     dragDropCoverText: "拖拽封面背景图片到此处...",
     dragDropCoverHover: "释放以设置为封面",
@@ -377,5 +387,10 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     actionLabelRestoreFolder: "恢复文件夹",
     actionLabelPermanentDeleteNote: "永久删除笔记",
     actionLabelPermanentDeleteFolder: "永久删除文件夹",
+    museWhisperTitle: "创作圣殿缪斯的低语",
+    museWhisperDesc: "若要唤醒 Scribe 创作回音壁（@idea 和 @fix 指令），请确保在“个人设置”中配置有效的 API 密钥。",
+    museWhisperMoti: "这些指令是您创作道路上的静谧向导，而非您文学旅程的主笔。请在遭遇阻碍或润色草稿时适度使用它们，而将真正的情感、生动的故事和非凡的创意保留在您自己的脑海中。最动人的篇章，永远源自您的内心深处。",
+    museSettingsBtn: "配置 API 密钥",
+    museShortcutsTip: "提示：在文中任意位置输入 @idea 可延伸灵感，输入 @fix 可修改语法。让您自己的声音指引创作。",
   }
 };

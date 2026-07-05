@@ -170,7 +170,9 @@ export default function App() {
   const [activeView, setActiveView] = useState<"editor" | "history" | "trash" | "settings">("editor");
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [showTour, setShowTour] = useState(false);
-  const [isLoadingScreen, setIsLoadingScreen] = useState(true);
+  const [isLoadingScreen, setIsLoadingScreen] = useState<boolean>(() => {
+    return !localStorage.getItem("scribe_visited_before");
+  });
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [theme] = useState<"light">("light");
@@ -639,7 +641,10 @@ export default function App() {
     <>
       <AnimatePresence mode="wait">
         {isLoadingScreen && (
-          <LoadingScreen onComplete={() => setIsLoadingScreen(false)} />
+          <LoadingScreen onComplete={() => {
+            setIsLoadingScreen(false);
+            localStorage.setItem("scribe_visited_before", "true");
+          }} />
         )}
       </AnimatePresence>
 
@@ -653,7 +658,10 @@ export default function App() {
             transition={{ duration: 0.3 }}
             className="w-full min-h-screen"
           >
-            <LandingPage onLaunchApp={() => setIsInApp(true)} />
+            <LandingPage onLaunchApp={() => {
+              setIsInApp(true);
+              setIsLoadingScreen(true);
+            }} />
           </motion.div>
         ) : (
           <motion.div
@@ -720,6 +728,9 @@ export default function App() {
                         onUpdateNote={handleUpdateNote}
                         onAddHistory={addHistoryLog}
                         onCheckAndIncrementUsage={checkAndIncrementUsage}
+                        onSelectView={setActiveView}
+                        language={language}
+                        t={t}
                       />
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">
