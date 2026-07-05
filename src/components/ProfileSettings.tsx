@@ -464,7 +464,7 @@ export default function ProfileSettings({
             </div>
           </div>
 
-          <div className="sm:pl-28">
+          <div className="sm:pl-4 sm:pt-4">
             <h2 className="text-xl font-serif font-bold text-[#141413] dark:text-[#ECEAE4] flex items-center gap-1.5">
               {profile.name || (language === "en" ? "Scribe Quill" : "笔墨墨客")}
             </h2>

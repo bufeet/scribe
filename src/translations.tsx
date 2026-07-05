@@ -198,7 +198,7 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     dragDropAvatarHover: "Drop Here",
     uploadCoverBtn: "Upload Cover",
     uploadAvatarBtn: "Upload",
-    dragHint: "Drag files to cover or portrait",
+    dragHint: "",
     // Encryption / Decryption Modal
     encryptionTitle: "Encrypting Sanctuary",
     encryptionProcessing: "Applying cryptographic seal to your creative works...",
@@ -331,7 +331,7 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     dragDropAvatarHover: "释放到此处",
     uploadCoverBtn: "上传封面背景",
     uploadAvatarBtn: "上传头像",
-    dragHint: "可将文件直接拖入封面或头像区域",
+    dragHint: "",
     // Encryption / Decryption Modal
     encryptionTitle: "正在加密并锁定圣殿数据",
     encryptionProcessing: "正在为您的创意文字加盖专属加密印记...",
