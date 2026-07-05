@@ -175,9 +175,14 @@ export default function App() {
   });
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isScribeView, setIsScribeView] = useState(false);
   const [theme] = useState<"light">("light");
   const [isInApp, setIsInApp] = useState<boolean>(false);
   const [isMobileDevice, setIsMobileDevice] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsScribeView(false);
+  }, [activeView, activeNoteId]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -671,7 +676,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             className={`flex h-screen w-screen transition-colors duration-300 overflow-hidden antialiased ${
-              theme === "dark" ? "dark bg-[#151514] text-[#ECEAE4]" : "bg-[#EEEDE9] text-[#141413]"
+              (theme as string) === "dark" ? "dark bg-[#151514] text-[#ECEAE4]" : "bg-[#EEEDE9] text-[#141413]"
             }`}
           >
             {/* Product Tour Overlay */}
@@ -692,7 +697,7 @@ export default function App() {
               activeNoteId={activeNoteId}
               profile={profile}
               activeTourStep={tourStep}
-              isCollapsed={isSidebarCollapsed}
+              isCollapsed={isSidebarCollapsed || isScribeView}
               language={language}
               onToggleLanguage={handleToggleLanguage}
               t={t}
@@ -707,6 +712,7 @@ export default function App() {
               onMoveFolder={handleMoveFolder}
               isLoading={isLoadingScreen}
               onShowNotification={showNotification}
+              isScribeView={isScribeView}
             />
 
             {/* Primary Workspace Stage */}
@@ -731,6 +737,8 @@ export default function App() {
                         onSelectView={setActiveView}
                         language={language}
                         t={t}
+                        isScribeView={isScribeView}
+                        onToggleScribeView={setIsScribeView}
                       />
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">

@@ -128,6 +128,8 @@ export interface TranslationDictionary {
   museWhisperMoti: string;
   museSettingsBtn: string;
   museShortcutsTip: string;
+  scribeViewEnter: string;
+  scribeViewExit: string;
 }
 
 export const translations: Record<"en" | "zh", TranslationDictionary> = {
@@ -261,6 +263,8 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     museWhisperMoti: "These commands are gentle guides along your path—not the authors of your journey. Use them to break blocks or smooth rough drafts, but let the true spirit, raw stories, and brilliant creativity flow from your own mind. The most beautiful pages are the ones written with your heart.",
     museSettingsBtn: "Configure API Key",
     museShortcutsTip: "Tip: Type @idea anywhere to extend thoughts, or @fix to correct grammar. Let your own voice lead.",
+    scribeViewEnter: "Scribe View",
+    scribeViewExit: "Exit Scribe View"
   },
   zh: {
     appName: "Scribe 创作圣殿",
@@ -392,5 +396,7 @@ export const translations: Record<"en" | "zh", TranslationDictionary> = {
     museWhisperMoti: "这些指令是您创作道路上的静谧向导，而非您文学旅程的主笔。请在遭遇阻碍或润色草稿时适度使用它们，而将真正的情感、生动的故事和非凡的创意保留在您自己的脑海中。最动人的篇章，永远源自您的内心深处。",
     museSettingsBtn: "配置 API 密钥",
     museShortcutsTip: "提示：在文中任意位置输入 @idea 可延伸灵感，输入 @fix 可修改语法。让您自己的声音指引创作。",
+    scribeViewEnter: "书卷预览",
+    scribeViewExit: "退出预览",
   }
 };

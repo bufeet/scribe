@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
+import ReactMarkdown from "react-markdown";
 import { Note, UserProfile } from "../types";
 import { 
   Sparkles, Check, RefreshCw, HelpCircle, FileText, 
   Calendar, Compass, Feather, Download, ChevronDown,
-  Bold, Italic, Underline, Link, List, ListOrdered, X
+  Bold, Italic, Underline, Link, List, ListOrdered, X, Glasses
 } from "lucide-react";
 import { translations, TranslationDictionary } from "../translations";
 
@@ -18,6 +19,8 @@ interface NoteEditorProps {
   onSelectView?: (view: "editor" | "history" | "trash" | "settings") => void;
   language?: "en" | "zh";
   t?: TranslationDictionary;
+  isScribeView?: boolean;
+  onToggleScribeView?: (active: boolean) => void;
 }
 
 const splitAtFirstUnquotedTag = (text: string, tag: string): [string, string] | null => {
@@ -53,6 +56,16 @@ const splitAtFirstUnquotedTag = (text: string, tag: string): [string, string] | 
   return null;
 };
 
+interface LinkPopoverState {
+  isOpen: boolean;
+  text: string;
+  url: string;
+  selectionStart: number;
+  selectionEnd: number;
+  top: number;
+  left: number;
+}
+
 export default function NoteEditor({ 
   note, 
   profile, 
@@ -61,7 +74,9 @@ export default function NoteEditor({
   onCheckAndIncrementUsage,
   onSelectView,
   language = "en",
-  t
+  t,
+  isScribeView = false,
+  onToggleScribeView
 }: NoteEditorProps) {
   const activeT = t || translations[language || "en"];
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -74,6 +89,123 @@ export default function NoteEditor({
 
   const [showMuseModal, setShowMuseModal] = useState(false);
   const [hasDismissedMuse, setHasDismissedMuse] = useState(false);
+
+  const [linkPopover, setLinkPopover] = useState<LinkPopoverState>({
+    isOpen: false,
+    text: "",
+    url: "https://",
+    selectionStart: 0,
+    selectionEnd: 0,
+    top: 0,
+    left: 0,
+  });
+
+  const getSelectionCoords = (textarea: HTMLTextAreaElement) => {
+    try {
+      const { selectionStart, selectionEnd, value } = textarea;
+      const div = document.createElement("div");
+      const style = window.getComputedStyle(textarea);
+      
+      const propertiesToCopy = [
+        "direction", "boxSizing", "width", "height", "overflowX", "overflowY",
+        "borderWidth", "borderStyle", "borderColor",
+        "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+        "fontFamily", "fontSize", "fontWeight", "fontStyle", "fontVariant", "fontStretch",
+        "lineHeight", "letterSpacing", "wordSpacing", "textTransform", "textIndent",
+        "whiteSpace", "wordBreak", "wordWrap"
+      ];
+      
+      propertiesToCopy.forEach((prop) => {
+        (div.style as any)[prop] = (style as any)[prop];
+      });
+      
+      div.style.position = "absolute";
+      div.style.visibility = "hidden";
+      div.style.whiteSpace = "pre-wrap";
+      div.style.wordWrap = "break-word";
+      div.style.top = "0";
+      div.style.left = "0";
+      
+      const textBefore = value.substring(0, selectionStart);
+      const textSelected = value.substring(selectionStart, selectionEnd);
+      
+      div.textContent = textBefore;
+      const span = document.createElement("span");
+      span.textContent = textSelected || "i";
+      div.appendChild(span);
+      
+      document.body.appendChild(div);
+      
+      const textareaRect = textarea.getBoundingClientRect();
+      const spanRect = span.getBoundingClientRect();
+      
+      let left = spanRect.left - textareaRect.left + textarea.scrollLeft;
+      let top = spanRect.top - textareaRect.top + textarea.scrollTop;
+      
+      const textareaWidth = textarea.clientWidth;
+      const textareaHeight = textarea.clientHeight;
+      
+      if (left < 0) left = 10;
+      if (left > textareaWidth - 10) left = textareaWidth - 150;
+      if (top < 0) top = 10;
+      if (top > textareaHeight - 10) top = textareaHeight - 80;
+      
+      document.body.removeChild(div);
+      
+      return { top, left, height: spanRect.height || 20 };
+    } catch (e) {
+      return { top: 100, left: 150, height: 24 };
+    }
+  };
+
+  const openLinkPopover = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+
+    const coords = getSelectionCoords(textarea);
+
+    setLinkPopover({
+      isOpen: true,
+      text: selectedText || "",
+      url: "https://",
+      selectionStart: start,
+      selectionEnd: end,
+      top: coords.top,
+      left: coords.left,
+    });
+  };
+
+  const confirmLink = (linkText: string, linkUrl: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const { selectionStart, selectionEnd } = linkPopover;
+    const text = textarea.value;
+
+    const formatted = `[${linkText || "link"}](${linkUrl || "https://"})`;
+
+    const newContent = text.substring(0, selectionStart) + formatted + text.substring(selectionEnd);
+    handleContentChange(newContent);
+
+    setLinkPopover(prev => ({ ...prev, isOpen: false }));
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(selectionStart, selectionStart + formatted.length);
+    }, 50);
+  };
+
+  const cancelLink = () => {
+    setLinkPopover(prev => ({ ...prev, isOpen: false }));
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+  };
 
   // Monitor whether to show the Muse warning modal
   useEffect(() => {
@@ -110,6 +242,36 @@ export default function NoteEditor({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const getCleanMarkdown = (text: string) => {
+    let temp = text;
+    let indexIdea = temp.indexOf("@idea");
+    while (indexIdea !== -1) {
+      const beforeChar = indexIdea > 0 ? temp[indexIdea - 1] : "";
+      const afterChar = indexIdea + 5 < temp.length ? temp[indexIdea + 5] : "";
+      const isQuoted = (beforeChar === '"' || beforeChar === '“') && (afterChar === '"' || afterChar === '”');
+      if (!isQuoted) {
+        temp = temp.substring(0, indexIdea) + temp.substring(indexIdea + 5);
+      } else {
+        indexIdea += 5;
+      }
+      indexIdea = temp.indexOf("@idea", indexIdea);
+    }
+
+    let indexFix = temp.indexOf("@fix");
+    while (indexFix !== -1) {
+      const beforeChar = indexFix > 0 ? temp[indexFix - 1] : "";
+      const afterChar = indexFix + 4 < temp.length ? temp[indexFix + 4] : "";
+      const isQuoted = (beforeChar === '"' || beforeChar === '“') && (afterChar === '"' || afterChar === '”');
+      if (!isQuoted) {
+        temp = temp.substring(0, indexFix) + temp.substring(indexFix + 4);
+      } else {
+        indexFix += 4;
+      }
+      indexFix = temp.indexOf("@fix", indexFix);
+    }
+    return temp;
+  };
 
   // Export as Plain Text (.txt)
   const handleExportTxt = () => {
@@ -366,12 +528,8 @@ export default function NoteEditor({
         cursorOffsetEnd = selectedText ? 0 : -4;
         break;
       case "link":
-        const url = prompt("Enter the URL:", "https://");
-        if (url === null) return; // user cancelled prompt
-        formatted = `[${selectedText || "link text"}](${url})`;
-        cursorOffsetStart = selectedText ? 0 : 1;
-        cursorOffsetEnd = selectedText ? 0 : -1;
-        break;
+        openLinkPopover();
+        return;
       case "ul":
         if (selectedText) {
           formatted = selectedText
@@ -423,92 +581,158 @@ export default function NoteEditor({
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-8 font-sans h-full flex flex-col transition-colors duration-300">
+    <div className="max-w-4xl mx-auto p-4 sm:p-8 font-sans h-full flex flex-col transition-colors duration-300 relative">
+      {/* Floating Exit Scribe View Button */}
+      <AnimatePresence>
+        {isScribeView && (
+          <motion.button
+            key="btn-exit-scribe"
+            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            id="btn-exit-scribe-view"
+            onClick={() => onToggleScribeView?.(false)}
+            className="fixed top-6 right-6 px-4 py-2 rounded-xl bg-[#FAF9F5] dark:bg-[#1A1A18] border border-[#E0D4C1] dark:border-[#33322E] text-[#D97757] hover:bg-[#EEEDE9] dark:hover:bg-[#252421] transition-all cursor-pointer shadow-md flex items-center gap-2 text-xs font-mono select-none z-[80]"
+            title="Exit Scribe View"
+          >
+            <Glasses className="w-4 h-4 animate-pulse" />
+            <span>{activeT.scribeViewExit}</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* Note Header Info */}
-      <div className="flex flex-wrap justify-between items-center border-b border-[#E0D4C1]/60 dark:border-[#33322E]/80 pb-4 mb-6 gap-2">
-        <div className="flex items-center gap-2.5 text-[#141413]/50 dark:text-[#ECEAE4]/50 text-xs font-mono">
-          <FileText className="w-4 h-4 text-[#D97757]" />
-          <span>Note Workspace</span>
-          <span>•</span>
-          <Calendar className="w-3.5 h-3.5" />
-          <span>Last modified: {formatDate(note.updatedAt)}</span>
-        </div>
+      <AnimatePresence initial={false}>
+        {!isScribeView && (
+          <motion.div
+            key="note-header-info"
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap justify-between items-center border-b border-[#E0D4C1]/60 dark:border-[#33322E]/80 pb-4 gap-2">
+              <div className="flex items-center gap-2.5 text-[#141413]/50 dark:text-[#ECEAE4]/50 text-xs font-mono">
+                <FileText className="w-4 h-4 text-[#D97757]" />
+                <span>Note Workspace</span>
+                <span>•</span>
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Last modified: {formatDate(note.updatedAt)}</span>
+              </div>
 
-        {/* Actions (AI Badge + Export Dropdown) */}
-        <div className="flex items-center gap-3">
-          {/* AI Model Badge */}
-          <div className="flex items-center gap-1.5 text-xs bg-[#D97757]/10 text-[#D97757] px-2.5 py-1 rounded-full font-mono">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Engine: {profile.aiModel === "gemini" ? "Gemini (System)" : profile.aiModel === "claude" ? "Claude" : "OpenAI"}</span>
-          </div>
+              {/* Actions (AI Badge + Scribe View + Export Dropdown) */}
+              <div className="flex items-center gap-3">
+                {/* AI Model Badge */}
+                <div className="flex items-center gap-1.5 text-xs bg-[#D97757]/10 text-[#D97757] px-2.5 py-1 rounded-full font-mono">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Engine: {profile.aiModel === "gemini" ? "Gemini (System)" : profile.aiModel === "claude" ? "Claude" : "OpenAI"}</span>
+                </div>
 
-          {/* Export Dropdown Menu */}
-          <div className="relative" ref={exportDropdownRef}>
-            <button
-              id="btn-export-dropdown-toggle"
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="flex items-center gap-1.5 text-xs bg-[#EEEDE9] hover:bg-[#E0D4C1] dark:bg-[#252421] dark:hover:bg-[#33322E] text-[#141413]/80 hover:text-[#141413] dark:text-[#ECEAE4]/80 dark:hover:text-[#ECEAE4] px-3 py-1 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] font-mono transition-all cursor-pointer shadow-sm animate-none"
-              title="Export Note to standard formats"
-            >
-              <Download className="w-3.5 h-3.5 text-[#D97757]" />
-              <span>Export</span>
-              <ChevronDown className="w-3 h-3 text-[#141413]/50 dark:text-[#ECEAE4]/50" />
-            </button>
-
-            <AnimatePresence>
-              {showExportMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute right-0 mt-1.5 w-48 bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-xl shadow-xl z-40 overflow-hidden font-mono text-xs text-[#141413] dark:text-[#ECEAE4] py-1"
+                {/* Scribe View Button */}
+                <button
+                  id="btn-enter-scribe-view"
+                  onClick={() => onToggleScribeView?.(true)}
+                  className="flex items-center gap-1.5 text-xs bg-[#EEEDE9] hover:bg-[#E0D4C1] dark:bg-[#252421] dark:hover:bg-[#33322E] text-[#141413]/80 hover:text-[#141413] dark:text-[#ECEAE4]/80 dark:hover:text-[#ECEAE4] px-3 py-1 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] font-mono transition-all cursor-pointer shadow-sm"
+                  title="Enter Scribe View"
                 >
-                  <button
-                    id="btn-export-txt"
-                    onClick={handleExportTxt}
-                    className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <span className="font-semibold text-gray-500 dark:text-gray-400">.TXT</span>
-                    <span>Plain Text</span>
-                  </button>
-                  <button
-                    id="btn-export-md"
-                    onClick={handleExportMd}
-                    className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <span className="font-semibold text-gray-500 dark:text-gray-400">.MD</span>
-                    <span>Markdown</span>
-                  </button>
-                  <button
-                    id="btn-export-pdf"
-                    onClick={handleExportPdf}
-                    className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer border-t border-[#E0D4C1]/40 dark:border-[#33322E]/40"
-                  >
-                    <span className="font-semibold text-[#D97757]">.PDF</span>
-                    <span>Watermarked PDF</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
+                  <Glasses className="w-3.5 h-3.5 text-[#D97757]" />
+                  <span>{activeT.scribeViewEnter}</span>
+                </button>
 
-      {/* Title Input */}
-      <input
-        id="note-title-input"
-        type="text"
-        value={note.title}
-        onChange={(e) => {
-          onUpdateNote({
-            ...note,
-            title: e.target.value,
-            updatedAt: new Date().toISOString(),
-          });
-        }}
-        placeholder="Drafting title..."
-        className="text-3xl sm:text-4xl font-serif font-bold bg-transparent border-none outline-none text-[#141413] dark:text-[#ECEAE4] mb-4 placeholder-gray-400 dark:placeholder-gray-600 w-full focus:ring-0"
-      />
+                {/* Export Dropdown Menu */}
+                <div className="relative" ref={exportDropdownRef}>
+                  <button
+                    id="btn-export-dropdown-toggle"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="flex items-center gap-1.5 text-xs bg-[#EEEDE9] hover:bg-[#E0D4C1] dark:bg-[#252421] dark:hover:bg-[#33322E] text-[#141413]/80 hover:text-[#141413] dark:text-[#ECEAE4]/80 dark:hover:text-[#ECEAE4] px-3 py-1 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] font-mono transition-all cursor-pointer shadow-sm animate-none"
+                    title="Export Note to standard formats"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#D97757]" />
+                    <span>Export</span>
+                    <ChevronDown className="w-3 h-3 text-[#141413]/50 dark:text-[#ECEAE4]/50" />
+                  </button>
+
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute right-0 mt-1.5 w-48 bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-xl shadow-xl z-40 overflow-hidden font-mono text-xs text-[#141413] dark:text-[#ECEAE4] py-1"
+                      >
+                        <button
+                          id="btn-export-txt"
+                          onClick={handleExportTxt}
+                          className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="font-semibold text-gray-500 dark:text-gray-400">.TXT</span>
+                          <span>Plain Text</span>
+                        </button>
+                        <button
+                          id="btn-export-md"
+                          onClick={handleExportMd}
+                          className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="font-semibold text-gray-500 dark:text-gray-400">.MD</span>
+                          <span>Markdown</span>
+                        </button>
+                        <button
+                          id="btn-export-pdf"
+                          onClick={handleExportPdf}
+                          className="w-full text-left px-4 py-2 hover:bg-[#E0D4C1]/50 dark:hover:bg-[#33322E]/50 hover:text-[#D97757] transition-all flex items-center gap-2 cursor-pointer border-t border-[#E0D4C1]/40 dark:border-[#33322E]/40"
+                        >
+                          <span className="font-semibold text-[#D97757]">.PDF</span>
+                          <span>Watermarked PDF</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Title */}
+      <div className="mb-4">
+        <AnimatePresence mode="wait">
+          {isScribeView ? (
+            <motion.h1
+              key="scribe-title"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.45, ease: "easeInOut" }}
+              className="text-3xl sm:text-4xl font-serif font-bold text-[#141413] dark:text-[#ECEAE4] border-b border-[#E0D4C1]/40 dark:border-[#33322E]/40 pb-4 mb-2 leading-tight"
+            >
+              {note.title || (language === "en" ? "Untitled Writing" : "无标题笔记")}
+            </motion.h1>
+          ) : (
+            <motion.input
+              key="editor-title"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.45, ease: "easeInOut" }}
+              id="note-title-input"
+              type="text"
+              value={note.title}
+              onChange={(e) => {
+                onUpdateNote({
+                  ...note,
+                  title: e.target.value,
+                  updatedAt: new Date().toISOString(),
+                });
+              }}
+              placeholder="Drafting title..."
+              className="text-3xl sm:text-4xl font-serif font-bold bg-transparent border-none outline-none text-[#141413] dark:text-[#ECEAE4] placeholder-gray-400 dark:placeholder-gray-600 w-full focus:ring-0"
+            />
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Muse Whisper Modal */}
       <AnimatePresence>
@@ -588,85 +812,277 @@ export default function NoteEditor({
       </AnimatePresence>
 
       {/* Shortcut Tip shown when API key is set */}
-      {profile.apiKey && profile.apiKey.trim() !== "" && (
-        <div className="flex flex-wrap items-center gap-2 mb-4 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-2.5 rounded-xl text-xs font-mono transition-colors duration-300">
-          <Feather className="w-3.5 h-3.5 text-[#D97757] shrink-0 ml-1.5" />
-          <span className="text-[#141413]/70 dark:text-[#ECEAE4]/70">
-            {activeT.museShortcutsTip}
-          </span>
-        </div>
-      )}
+      <AnimatePresence>
+        {!isScribeView && profile.apiKey && profile.apiKey.trim() !== "" && (
+          <motion.div
+            key="shortcut-tip"
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap items-center gap-2 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-2.5 rounded-xl text-xs font-mono transition-colors duration-300">
+              <Feather className="w-3.5 h-3.5 text-[#D97757] shrink-0 ml-1.5" />
+              <span className="text-[#141413]/70 dark:text-[#ECEAE4]/70">
+                {activeT.museShortcutsTip}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Text Editing Toolbar */}
-      <div className="flex flex-wrap items-center gap-1.5 mb-4 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-1.5 rounded-xl text-xs font-mono transition-colors duration-300">
-        <span className="text-[#141413]/60 dark:text-[#ECEAE4]/60 mr-1.5 ml-2">Format:</span>
-        <button
-          id="btn-format-bold"
-          onClick={() => applyFormatting("bold")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Bold (**text**)"
-        >
-          <Bold className="w-3.5 h-3.5" />
-        </button>
-        <button
-          id="btn-format-italic"
-          onClick={() => applyFormatting("italic")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Italic (*text*)"
-        >
-          <Italic className="w-3.5 h-3.5" />
-        </button>
-        <button
-          id="btn-format-underline"
-          onClick={() => applyFormatting("underline")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Underline (<u>text</u>)"
-        >
-          <Underline className="w-3.5 h-3.5" />
-        </button>
-        <span className="h-4 w-px bg-[#E0D4C1]/60 dark:bg-[#33322E] mx-1" />
-        <button
-          id="btn-format-link"
-          onClick={() => applyFormatting("link")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Insert Link ([text](url))"
-        >
-          <Link className="w-3.5 h-3.5" />
-        </button>
-        <button
-          id="btn-format-ul"
-          onClick={() => applyFormatting("ul")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Unordered List"
-        >
-          <List className="w-3.5 h-3.5" />
-        </button>
-        <button
-          id="btn-format-ol"
-          onClick={() => applyFormatting("ol")}
-          className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
-          title="Ordered List"
-        >
-          <ListOrdered className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <AnimatePresence>
+        {!isScribeView && (
+          <motion.div
+            key="editing-toolbar"
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-wrap items-center gap-1.5 bg-[#EEEDE9] dark:bg-[#1E1E1C] border border-[#E0D4C1]/70 dark:border-[#33322E] p-1.5 rounded-xl text-xs font-mono transition-colors duration-300">
+              <span className="text-[#141413]/60 dark:text-[#ECEAE4]/60 mr-1.5 ml-2">Format:</span>
+              <button
+                id="btn-format-bold"
+                onClick={() => applyFormatting("bold")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Bold (**text**)"
+              >
+                <Bold className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="btn-format-italic"
+                onClick={() => applyFormatting("italic")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Italic (*text*)"
+              >
+                <Italic className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="btn-format-underline"
+                onClick={() => applyFormatting("underline")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Underline (<u>text</u>)"
+              >
+                <Underline className="w-3.5 h-3.5" />
+              </button>
+              <span className="h-4 w-px bg-[#E0D4C1]/60 dark:bg-[#33322E] mx-1" />
+              <button
+                id="btn-format-link"
+                onClick={() => applyFormatting("link")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Insert Link ([text](url))"
+              >
+                <Link className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="btn-format-ul"
+                onClick={() => applyFormatting("ul")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Unordered List"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="btn-format-ol"
+                onClick={() => applyFormatting("ol")}
+                className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
+                title="Ordered List"
+              >
+                <ListOrdered className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Editor Main Textarea */}
+      {/* Editor Main Textarea / Scribe View */}
       <div className="relative flex-grow flex flex-col">
-        <textarea
-          id="note-content-textarea"
-          ref={textareaRef}
-          value={note.content}
-          onChange={(e) => handleContentChange(e.target.value)}
-          onFocus={() => setEditorFocused(true)}
-          onBlur={() => setEditorFocused(false)}
-          placeholder="Begin writing your masterpiece here... Use '@idea' to extend your thoughts, or '@fix' to edit syntax."
-          className="w-full flex-grow bg-transparent border-none outline-none resize-none text-[#141413]/90 dark:text-[#ECEAE4]/90 text-base leading-relaxed font-serif claude-editor focus:ring-0 min-h-[400px] pb-24"
-        />
+        <AnimatePresence mode="wait">
+          {isScribeView ? (
+            <motion.div
+              key="scribe-reader-view"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+              className="w-full flex-grow pb-24 overflow-y-auto max-w-none prose dark:prose-invert"
+            >
+              <div className="markdown-body text-[#141413]/90 dark:text-[#ECEAE4]/90 text-base leading-relaxed font-serif select-text">
+                <ReactMarkdown
+                  components={{
+                    h1: ({node, ...props}) => <h1 className="text-2xl font-serif font-bold text-[#141413] dark:text-[#ECEAE4] mt-6 mb-3 border-b border-[#E0D4C1]/40 pb-1" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-xl font-serif font-bold text-[#141413] dark:text-[#ECEAE4] mt-5 mb-2.5" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="text-lg font-serif font-bold text-[#141413] dark:text-[#ECEAE4] mt-4 mb-2" {...props} />,
+                    p: ({node, ...props}) => <p className="text-base text-[#141413]/95 dark:text-[#ECEAE4]/95 mb-4 leading-relaxed font-serif" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc pl-6 mb-4 space-y-1.5" {...props} />,
+                    ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-4 space-y-1.5" {...props} />,
+                    li: ({node, ...props}) => <li className="text-base text-[#141413]/90 dark:text-[#ECEAE4]/90 font-serif" {...props} />,
+                    blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-[#D97757] pl-4 italic my-4 text-[#141413]/75 dark:text-[#ECEAE4]/75 bg-[#EEEDE9]/30 dark:bg-[#1E1E1C]/30 p-3 rounded-r-xl" {...props} />,
+                    code: ({node, ...props}) => <code className="bg-[#EEEDE9] dark:bg-[#252421] px-1.5 py-0.5 rounded text-sm font-mono text-[#D97757]" {...props} />,
+                    pre: ({node, ...props}) => <pre className="bg-[#EEEDE9] dark:bg-[#252421] p-4 rounded-xl overflow-x-auto text-sm font-mono text-[#141413]/90 dark:text-[#ECEAE4]/90 border border-[#E0D4C1]/40 dark:border-[#33322E]/40 mb-4" {...props} />,
+                    a: ({node, ...props}) => (
+                      <a 
+                        className="text-[#D97757] hover:underline hover:text-[#c46546] font-medium transition-colors inline-flex items-center gap-0.5 cursor-pointer" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        title={`Open link: ${props.href}`}
+                        {...props}
+                      >
+                        {props.children}
+                        <span className="inline-block text-[10px] opacity-75 font-mono ml-0.5">↗</span>
+                      </a>
+                    ),
+                  }}
+                >
+                  {getCleanMarkdown(note.content)}
+                </ReactMarkdown>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.textarea
+              key="scribe-editor-view"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+              id="note-content-textarea"
+              ref={textareaRef}
+              value={note.content}
+              onChange={(e) => handleContentChange(e.target.value)}
+              onFocus={() => setEditorFocused(true)}
+              onBlur={() => setEditorFocused(false)}
+              placeholder="Begin writing your masterpiece here... Use '@idea' to extend your thoughts, or '@fix' to edit syntax."
+              className="w-full flex-grow bg-transparent border-none outline-none resize-none text-[#141413]/90 dark:text-[#ECEAE4]/90 text-base leading-relaxed font-serif claude-editor focus:ring-0 min-h-[400px] pb-24"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Link creation floating card with cartoon animation */}
+        <AnimatePresence>
+          {!isScribeView && linkPopover.isOpen && (
+            <motion.div
+              key="link-popover-card"
+              initial={{ opacity: 0, scale: 0.85, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 15 }}
+              transition={{ type: "spring", damping: 15, stiffness: 180 }}
+              style={{
+                position: "absolute",
+                top: `${Math.max(10, linkPopover.top - 240)}px`,
+                left: `${Math.max(10, Math.min(textareaRef.current ? textareaRef.current.clientWidth - 300 : 300, linkPopover.left - 130))}px`,
+                zIndex: 100,
+              }}
+              className="w-[280px] bg-[#FAF9F5] dark:bg-[#1E1E1C] border border-[#D97757]/40 rounded-2xl shadow-xl p-4 flex flex-col font-mono text-xs text-[#141413] dark:text-[#ECEAE4]"
+            >
+              {/* Pointy Arrow indicator */}
+              <div 
+                className="absolute left-[130px] bottom-[-6px] w-3 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] border-r border-b border-[#D97757]/40 rotate-45"
+              />
+
+              {/* Cartoon Mascot: Nibby the Quill */}
+              <div className="flex items-center gap-3 mb-3 border-b border-[#E0D4C1]/50 dark:border-[#33322E]/80 pb-2.5">
+                <motion.div 
+                  className="w-10 h-10 bg-gradient-to-br from-amber-400 to-[#D97757] rounded-xl flex items-center justify-center relative shadow-sm"
+                  animate={{ 
+                    y: [0, -4, 0],
+                    rotate: [0, -3, 3, 0]
+                  }}
+                  transition={{ 
+                    repeat: Infinity, 
+                    duration: 2.2, 
+                    ease: "easeInOut" 
+                  }}
+                >
+                  {/* Pen Nib detail */}
+                  <div className="absolute top-1 w-1.5 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] rounded-full" />
+                  
+                  {/* Blinking Anime Eyes */}
+                  <div className="flex gap-1.5 mt-2 z-10">
+                    <motion.div 
+                      className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
+                      animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
+                      transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
+                    />
+                    <motion.div 
+                      className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
+                      animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
+                      transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
+                    />
+                  </div>
+                  
+                  {/* Rosy Cheeks */}
+                  <div className="absolute left-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
+                  <div className="absolute right-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
+                  
+                  {/* Happy Smile */}
+                  <div className="absolute bottom-1.5 w-2.5 h-1 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-b-full" />
+                </motion.div>
+
+                <div>
+                  <h4 className="font-bold text-[#D97757]">Link with Scribe</h4>
+                  <p className="text-[10px] text-[#141413]/60 dark:text-[#ECEAE4]/60">Summon links into existence!</p>
+                </div>
+              </div>
+
+              {/* Form Inputs */}
+              <div className="space-y-2 mb-3">
+                <div>
+                  <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Link Text</label>
+                  <input
+                    type="text"
+                    value={linkPopover.text}
+                    onChange={(e) => setLinkPopover(prev => ({ ...prev, text: e.target.value }))}
+                    placeholder="Enter text..."
+                    className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Destination URL</label>
+                  <input
+                    type="text"
+                    value={linkPopover.url}
+                    onChange={(e) => setLinkPopover(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://"
+                    className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        confirmLink(linkPopover.text, linkPopover.url);
+                      } else if (e.key === "Escape") {
+                        cancelLink();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={cancelLink}
+                  className="px-2.5 py-1.5 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] hover:bg-[#EEEDE9] dark:hover:bg-[#252421] text-[#141413]/70 dark:text-[#ECEAE4]/70 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmLink(linkPopover.text, linkPopover.url)}
+                  className="px-3 py-1.5 rounded-lg bg-[#D97757] text-white hover:bg-[#c46546] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span>Link</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* AI Loading & Status Bar */}
         <AnimatePresence>
-          {isAiLoading && (
+          {!isScribeView && isAiLoading && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -683,7 +1099,7 @@ export default function NoteEditor({
 
         {/* AI Error feedback */}
         <AnimatePresence>
-          {aiError && (
+          {!isScribeView && aiError && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -706,17 +1122,30 @@ export default function NoteEditor({
       </div>
 
       {/* Mini cozy footer inside editor */}
-      <div className="text-[10px] font-mono text-[#141413]/35 dark:text-[#ECEAE4]/35 flex justify-between items-center mt-auto pt-4 border-t border-[#E0D4C1]/35 dark:border-[#33322E]/50">
-        <div className="flex items-center gap-1.5">
-          <Compass className="w-3 h-3 text-[#D97757]" />
-          <span>Scribe Offline-First Sandbox</span>
-        </div>
-        <div>
-          <span>{note.content.length} characters</span>
-          <span className="mx-1.5">•</span>
-          <span>{note.content.split(/\s+/).filter(Boolean).length} words</span>
-        </div>
-      </div>
+      <AnimatePresence>
+        {!isScribeView && (
+          <motion.div
+            key="cozy-footer"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.45, ease: "easeInOut" }}
+            className="overflow-hidden mt-auto"
+          >
+            <div className="text-[10px] font-mono text-[#141413]/35 dark:text-[#ECEAE4]/35 flex justify-between items-center pt-4 border-t border-[#E0D4C1]/35 dark:border-[#33322E]/50">
+              <div className="flex items-center gap-1.5">
+                <Compass className="w-3 h-3 text-[#D97757]" />
+                <span>Scribe Offline-First Sandbox</span>
+              </div>
+              <div>
+                <span>{note.content.length} characters</span>
+                <span className="mx-1.5">•</span>
+                <span>{note.content.split(/\s+/).filter(Boolean).length} words</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

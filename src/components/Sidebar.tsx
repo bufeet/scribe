@@ -29,6 +29,7 @@ interface SidebarProps {
   onMoveFolder: (folderId: string, parentId: string | null) => void;
   isLoading?: boolean;
   onShowNotification?: (message: string, type?: "info" | "success" | "warning" | "error") => void;
+  isScribeView?: boolean;
 }
 
 export default function Sidebar({
@@ -53,6 +54,7 @@ export default function Sidebar({
   onMoveFolder,
   isLoading = false,
   onShowNotification,
+  isScribeView = false,
 }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [newFolderName, setNewFolderName] = useState("");
@@ -355,7 +357,7 @@ export default function Sidebar({
       isCollapsed ? "w-0 border-r-0" : "w-80"
     }`}>
       {/* Absolute Toggle Button hanging on the right edge */}
-      {!isLoading && (
+      {!isLoading && !isScribeView && (
         <button
           id="btn-toggle-sidebar"
           onClick={onToggleCollapse}
@@ -624,10 +626,7 @@ export default function Sidebar({
           </span>
         </button>
 
-        {/* Creator Credits */}
-        <div className="pt-2 mt-2 text-center text-[9px] font-mono text-[#EEEDE9]/35 border-t border-[#EEEDE9]/5 flex flex-col gap-0.5">
-          <div>All credits belong to <a href="https://linkedin.com/in/joalx" target="_blank" rel="noopener noreferrer" className="text-[#D97757] hover:underline hover:text-[#c46546] font-semibold">João Leite (@joalx)</a></div>
-        </div>
+
       </div>
     </div>
     </div>
