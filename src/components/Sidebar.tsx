@@ -2,10 +2,11 @@ import React, { useState, FormEvent, DragEvent } from "react";
 import { Folder, Note, UserProfile } from "../types";
 import { 
   FolderPlus, FilePlus, ChevronDown, ChevronRight, ChevronLeft, Folder as FolderIcon, 
-  FileText, Trash2, Clock, Settings, Sparkles, Plus, BookOpen, Trash, Globe
+  FileText, Trash2, Clock, Settings, Sparkles, Plus, BookOpen, Trash, Globe, Search
 } from "lucide-react";
 import MusicPlayer from "./MusicPlayer";
 import { TranslationDictionary } from "../translations";
+import SearchModal from "./SearchModal";
 
 interface SidebarProps {
   folders: Folder[];
@@ -20,7 +21,7 @@ interface SidebarProps {
   t: TranslationDictionary;
   onToggleCollapse: () => void;
   onSelectView: (view: "editor" | "history" | "trash" | "settings") => void;
-  onSelectNote: (noteId: string) => void;
+  onSelectNote: (noteId: string, highlightQuery?: string) => void;
   onAddFolder: (name: string, parentId?: string | null) => void;
   onAddNote: (folderId: string | null) => void;
   onDeleteNote: (noteId: string) => void;
@@ -61,6 +62,18 @@ export default function Sidebar({
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [activeSubfolderParentId, setActiveSubfolderParentId] = useState<string | null>(null);
   const [newSubfolderName, setNewSubfolderName] = useState("");
+
+  const [searchVal, setSearchVal] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
+
+  const handleSearchSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (searchVal.trim()) {
+      setActiveSearchQuery(searchVal.trim());
+      setIsSearchOpen(true);
+    }
+  };
 
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverRootFolders, setDragOverRootFolders] = useState(false);
@@ -440,6 +453,23 @@ export default function Sidebar({
       {/* Primary Navigation / Tree List */}
       <div className="flex-grow overflow-y-auto px-2 py-4 space-y-5">
         
+        {/* Search field located above Chronicles */}
+        <div className="px-1.5">
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <input
+              type="text"
+              placeholder={language === "en" ? "Search notes & folders..." : "搜索笔记与文件夹..."}
+              value={searchVal}
+              onChange={(e) => setSearchVal(e.target.value)}
+              className="w-full bg-[#EEEDE9]/5 hover:bg-[#EEEDE9]/10 focus:bg-[#EEEDE9]/10 border border-[#EEEDE9]/10 hover:border-[#EEEDE9]/20 focus:border-[#D97757]/60 rounded-xl pl-9 pr-3 py-2 text-xs text-[#EEEDE9] focus:outline-none transition-all placeholder-[#EEEDE9]/30"
+            />
+            <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-[#EEEDE9]/40" />
+            <span className="absolute right-3 top-2.5 text-[9px] font-mono text-[#EEEDE9]/20 pointer-events-none select-none">
+              ↵
+            </span>
+          </form>
+        </div>
+
         {/* Navigation Tabs */}
         <div className={`space-y-1 p-1.5 rounded-xl transition-all duration-300 ${
           activeTourStep === 2 
@@ -629,6 +659,18 @@ export default function Sidebar({
 
       </div>
     </div>
+
+    {/* Search Modal component overlay */}
+    <SearchModal
+      isOpen={isSearchOpen}
+      onClose={() => setIsSearchOpen(false)}
+      query={activeSearchQuery}
+      notes={notes}
+      folders={folders}
+      onSelectNote={onSelectNote}
+      onSelectView={onSelectView}
+      language={language}
+    />
     </div>
   );
 }

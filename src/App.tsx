@@ -169,7 +169,17 @@ export default function App() {
   const [fireworksTrigger, setFireworksTrigger] = useState(0);
   const [activeView, setActiveView] = useState<"editor" | "history" | "trash" | "settings">("editor");
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [searchHighlightQuery, setSearchHighlightQuery] = useState<string>("");
   const [showTour, setShowTour] = useState(false);
+
+  const handleSelectNote = (noteId: string, highlightQuery?: string) => {
+    setActiveNoteId(noteId);
+    if (highlightQuery) {
+      setSearchHighlightQuery(highlightQuery);
+    } else {
+      setSearchHighlightQuery("");
+    }
+  };
   const [isLoadingScreen, setIsLoadingScreen] = useState<boolean>(() => {
     return !localStorage.getItem("scribe_visited_before");
   });
@@ -703,7 +713,7 @@ export default function App() {
               t={t}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onSelectView={setActiveView}
-              onSelectNote={setActiveNoteId}
+              onSelectNote={handleSelectNote}
               onAddFolder={handleAddFolder}
               onAddNote={handleAddNote}
               onDeleteNote={handleDeleteNote}
@@ -739,6 +749,8 @@ export default function App() {
                         t={t}
                         isScribeView={isScribeView}
                         onToggleScribeView={setIsScribeView}
+                        searchHighlightQuery={searchHighlightQuery}
+                        onClearHighlightQuery={() => setSearchHighlightQuery("")}
                       />
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">

@@ -21,6 +21,8 @@ interface NoteEditorProps {
   t?: TranslationDictionary;
   isScribeView?: boolean;
   onToggleScribeView?: (active: boolean) => void;
+  searchHighlightQuery?: string;
+  onClearHighlightQuery?: () => void;
 }
 
 const splitAtFirstUnquotedTag = (text: string, tag: string): [string, string] | null => {
@@ -76,7 +78,9 @@ export default function NoteEditor({
   language = "en",
   t,
   isScribeView = false,
-  onToggleScribeView
+  onToggleScribeView,
+  searchHighlightQuery,
+  onClearHighlightQuery
 }: NoteEditorProps) {
   const activeT = t || translations[language || "en"];
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -86,6 +90,7 @@ export default function NoteEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+  const linkPopoverRef = useRef<HTMLDivElement>(null);
 
   const [showMuseModal, setShowMuseModal] = useState(false);
   const [hasDismissedMuse, setHasDismissedMuse] = useState(false);
@@ -119,36 +124,43 @@ export default function NoteEditor({
         (div.style as any)[prop] = (style as any)[prop];
       });
       
-      div.style.position = "absolute";
+      const textareaRect = textarea.getBoundingClientRect();
+      
+      div.style.position = "fixed";
       div.style.visibility = "hidden";
-      div.style.whiteSpace = "pre-wrap";
-      div.style.wordWrap = "break-word";
-      div.style.top = "0";
-      div.style.left = "0";
+      div.style.top = `${textareaRect.top}px`;
+      div.style.left = `${textareaRect.left}px`;
+      div.style.width = `${textareaRect.width}px`;
+      div.style.height = `${textareaRect.height}px`;
+      div.style.overflow = "hidden";
+      div.style.overflowY = textarea.scrollHeight > textarea.clientHeight ? "scroll" : "hidden";
+      div.style.margin = "0";
       
       const textBefore = value.substring(0, selectionStart);
       const textSelected = value.substring(selectionStart, selectionEnd);
+      const textAfter = value.substring(selectionEnd);
       
-      div.textContent = textBefore;
+      const beforeNode = document.createTextNode(textBefore);
+      div.appendChild(beforeNode);
+      
       const span = document.createElement("span");
       span.textContent = textSelected || "i";
       div.appendChild(span);
       
+      const afterNode = document.createTextNode(textAfter);
+      div.appendChild(afterNode);
+      
       document.body.appendChild(div);
       
-      const textareaRect = textarea.getBoundingClientRect();
+      // Sync scroll offsets
+      div.scrollTop = textarea.scrollTop;
+      div.scrollLeft = textarea.scrollLeft;
+      
       const spanRect = span.getBoundingClientRect();
+      const parentRect = textarea.parentElement ? textarea.parentElement.getBoundingClientRect() : textareaRect;
       
-      let left = spanRect.left - textareaRect.left + textarea.scrollLeft;
-      let top = spanRect.top - textareaRect.top + textarea.scrollTop;
-      
-      const textareaWidth = textarea.clientWidth;
-      const textareaHeight = textarea.clientHeight;
-      
-      if (left < 0) left = 10;
-      if (left > textareaWidth - 10) left = textareaWidth - 150;
-      if (top < 0) top = 10;
-      if (top > textareaHeight - 10) top = textareaHeight - 80;
+      let left = spanRect.left - parentRect.left;
+      let top = spanRect.top - parentRect.top;
       
       document.body.removeChild(div);
       
@@ -206,6 +218,23 @@ export default function NoteEditor({
       textareaRef.current?.focus();
     }, 50);
   };
+
+  useEffect(() => {
+    if (!linkPopover.isOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (linkPopoverRef.current && !linkPopoverRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement;
+        if (target.closest("[data-link-trigger]")) return;
+        cancelLink();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [linkPopover.isOpen]);
 
   // Monitor whether to show the Muse warning modal
   useEffect(() => {
@@ -395,6 +424,38 @@ export default function NoteEditor({
       textareaRef.current.focus();
     }
   }, [note.id]);
+
+  // Trigger highlighting inside editor when searchHighlightQuery is set
+  useEffect(() => {
+    if (searchHighlightQuery && searchHighlightQuery.trim()) {
+      // If we are in Scribe preview reader mode, turn it off so we are in the editor field
+      if (isScribeView && onToggleScribeView) {
+        onToggleScribeView(false);
+      }
+
+      // Allow a small timeout for the editor view or textarea to mount and render fully
+      const timer = setTimeout(() => {
+        if (textareaRef.current) {
+          const content = note.content || "";
+          const query = searchHighlightQuery.toLowerCase();
+          const index = content.toLowerCase().indexOf(query);
+          if (index !== -1) {
+            const textarea = textareaRef.current;
+            textarea.focus();
+            textarea.setSelectionRange(index, index + searchHighlightQuery.length);
+            
+            // Calculate approximate scroll position to bring the word into view
+            const linesBefore = content.substring(0, index).split("\n").length;
+            const lineHeight = 24; // approximation for standard leading-relaxed line height
+            const scrollTop = Math.max(0, (linesBefore - 4) * lineHeight);
+            textarea.scrollTop = scrollTop;
+          }
+        }
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+  }, [searchHighlightQuery, note.id, isScribeView]);
 
   // Handle checking for tags as the user types
   const handleContentChange = (newContent: string) => {
@@ -695,6 +756,38 @@ export default function NoteEditor({
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Search Highlight Banner */}
+      <AnimatePresence>
+        {searchHighlightQuery && searchHighlightQuery.trim() && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            className="mb-4 overflow-hidden"
+          >
+            <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs text-[#141413] dark:text-[#ECEAE4]">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
+                <span>
+                  {language === "en" ? (
+                    <>Highlighted occurrences of <strong>"{searchHighlightQuery}"</strong> inside the editor field.</>
+                  ) : (
+                    <>已在编辑器字段中为您高亮标记 <strong>“{searchHighlightQuery}”</strong> 的匹配项。</>
+                  )}
+                </span>
+              </div>
+              <button
+                onClick={onClearHighlightQuery}
+                className="p-1 rounded-lg hover:bg-amber-500/20 text-[#141413]/50 dark:text-[#ECEAE4]/50 hover:text-amber-600 dark:hover:text-amber-400 transition-all cursor-pointer font-mono text-[10px] uppercase font-bold tracking-wider flex items-center gap-1 shrink-0"
+              >
+                <span>{language === "en" ? "Clear" : "清除高亮"}</span>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Title */}
       <div className="mb-4">
@@ -872,6 +965,7 @@ export default function NoteEditor({
               <span className="h-4 w-px bg-[#E0D4C1]/60 dark:bg-[#33322E] mx-1" />
               <button
                 id="btn-format-link"
+                data-link-trigger="true"
                 onClick={() => applyFormatting("link")}
                 className="p-1.5 rounded hover:bg-[#D97757]/10 hover:text-[#D97757] text-[#141413]/80 dark:text-[#ECEAE4]/80 transition-all flex items-center justify-center cursor-pointer"
                 title="Insert Link ([text](url))"
@@ -972,109 +1066,115 @@ export default function NoteEditor({
               transition={{ type: "spring", damping: 15, stiffness: 180 }}
               style={{
                 position: "absolute",
-                top: `${Math.max(10, linkPopover.top - 240)}px`,
+                top: `${linkPopover.top}px`,
                 left: `${Math.max(10, Math.min(textareaRef.current ? textareaRef.current.clientWidth - 300 : 300, linkPopover.left - 130))}px`,
+                width: "0px",
+                height: "0px",
                 zIndex: 100,
               }}
-              className="w-[280px] bg-[#FAF9F5] dark:bg-[#1E1E1C] border border-[#D97757]/40 rounded-2xl shadow-xl p-4 flex flex-col font-mono text-xs text-[#141413] dark:text-[#ECEAE4]"
             >
-              {/* Pointy Arrow indicator */}
-              <div 
-                className="absolute left-[130px] bottom-[-6px] w-3 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] border-r border-b border-[#D97757]/40 rotate-45"
-              />
+              <div
+                ref={linkPopoverRef}
+                className="absolute bottom-full left-0 mb-[30px] w-[280px] bg-[#FAF9F5] dark:bg-[#1E1E1C] border border-[#D97757]/40 rounded-2xl shadow-xl p-4 flex flex-col font-mono text-xs text-[#141413] dark:text-[#ECEAE4]"
+              >
+                {/* Pointy Arrow indicator */}
+                <div 
+                  className="absolute left-[130px] bottom-[-6px] w-3 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] border-r border-b border-[#D97757]/40 rotate-45"
+                />
 
-              {/* Cartoon Mascot: Nibby the Quill */}
-              <div className="flex items-center gap-3 mb-3 border-b border-[#E0D4C1]/50 dark:border-[#33322E]/80 pb-2.5">
-                <motion.div 
-                  className="w-10 h-10 bg-gradient-to-br from-amber-400 to-[#D97757] rounded-xl flex items-center justify-center relative shadow-sm"
-                  animate={{ 
-                    y: [0, -4, 0],
-                    rotate: [0, -3, 3, 0]
-                  }}
-                  transition={{ 
-                    repeat: Infinity, 
-                    duration: 2.2, 
-                    ease: "easeInOut" 
-                  }}
-                >
-                  {/* Pen Nib detail */}
-                  <div className="absolute top-1 w-1.5 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] rounded-full" />
-                  
-                  {/* Blinking Anime Eyes */}
-                  <div className="flex gap-1.5 mt-2 z-10">
-                    <motion.div 
-                      className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
-                      animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
-                      transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
-                    />
-                    <motion.div 
-                      className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
-                      animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
-                      transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
+                {/* Cartoon Mascot: Nibby the Quill */}
+                <div className="flex items-center gap-3 mb-3 border-b border-[#E0D4C1]/50 dark:border-[#33322E]/80 pb-2.5">
+                  <motion.div 
+                    className="w-10 h-10 bg-gradient-to-br from-amber-400 to-[#D97757] rounded-xl flex items-center justify-center relative shadow-sm"
+                    animate={{ 
+                      y: [0, -4, 0],
+                      rotate: [0, -3, 3, 0]
+                    }}
+                    transition={{ 
+                      repeat: Infinity, 
+                      duration: 2.2, 
+                      ease: "easeInOut" 
+                    }}
+                  >
+                    {/* Pen Nib detail */}
+                    <div className="absolute top-1 w-1.5 h-3 bg-[#FAF9F5] dark:bg-[#1E1E1C] rounded-full" />
+                    
+                    {/* Blinking Anime Eyes */}
+                    <div className="flex gap-1.5 mt-2 z-10">
+                      <motion.div 
+                        className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
+                        animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
+                        transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
+                      />
+                      <motion.div 
+                        className="w-1.5 h-1.5 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-full"
+                        animate={{ scaleY: [1, 1, 0.1, 1, 1] }}
+                        transition={{ repeat: Infinity, duration: 3, times: [0, 0.8, 0.85, 0.9, 1] }}
+                      />
+                    </div>
+                    
+                    {/* Rosy Cheeks */}
+                    <div className="absolute left-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
+                    <div className="absolute right-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
+                    
+                    {/* Happy Smile */}
+                    <div className="absolute bottom-1.5 w-2.5 h-1 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-b-full" />
+                  </motion.div>
+
+                  <div>
+                    <h4 className="font-bold text-[#D97757]">Link with Scribe</h4>
+                    <p className="text-[10px] text-[#141413]/60 dark:text-[#ECEAE4]/60">Summon links into existence!</p>
+                  </div>
+                </div>
+
+                {/* Form Inputs */}
+                <div className="space-y-2 mb-3">
+                  <div>
+                    <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Link Text</label>
+                    <input
+                      type="text"
+                      value={linkPopover.text}
+                      onChange={(e) => setLinkPopover(prev => ({ ...prev, text: e.target.value }))}
+                      placeholder="Enter text..."
+                      className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
                     />
                   </div>
-                  
-                  {/* Rosy Cheeks */}
-                  <div className="absolute left-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
-                  <div className="absolute right-1.5 bottom-2.5 w-1 h-1 bg-red-400 rounded-full opacity-70" />
-                  
-                  {/* Happy Smile */}
-                  <div className="absolute bottom-1.5 w-2.5 h-1 bg-[#FAF9F5] dark:bg-[#FAF9F5] rounded-b-full" />
-                </motion.div>
-
-                <div>
-                  <h4 className="font-bold text-[#D97757]">Link with Scribe</h4>
-                  <p className="text-[10px] text-[#141413]/60 dark:text-[#ECEAE4]/60">Summon links into existence!</p>
+                  <div>
+                    <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Destination URL</label>
+                    <input
+                      type="text"
+                      value={linkPopover.url}
+                      onChange={(e) => setLinkPopover(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="https://"
+                      className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          confirmLink(linkPopover.text, linkPopover.url);
+                        } else if (e.key === "Escape") {
+                          cancelLink();
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Form Inputs */}
-              <div className="space-y-2 mb-3">
-                <div>
-                  <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Link Text</label>
-                  <input
-                    type="text"
-                    value={linkPopover.text}
-                    onChange={(e) => setLinkPopover(prev => ({ ...prev, text: e.target.value }))}
-                    placeholder="Enter text..."
-                    className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
-                  />
+                {/* Action Buttons */}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={cancelLink}
+                    className="px-2.5 py-1.5 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] hover:bg-[#EEEDE9] dark:hover:bg-[#252421] text-[#141413]/70 dark:text-[#ECEAE4]/70 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => confirmLink(linkPopover.text, linkPopover.url)}
+                    className="px-3 py-1.5 rounded-lg bg-[#D97757] text-white hover:bg-[#c46546] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Link</span>
+                  </button>
                 </div>
-                <div>
-                  <label className="text-[10px] text-[#141413]/50 dark:text-[#ECEAE4]/50 block mb-0.5 font-bold uppercase tracking-wide">Destination URL</label>
-                  <input
-                    type="text"
-                    value={linkPopover.url}
-                    onChange={(e) => setLinkPopover(prev => ({ ...prev, url: e.target.value }))}
-                    placeholder="https://"
-                    className="w-full bg-[#EEEDE9] dark:bg-[#252421] border border-[#E0D4C1] dark:border-[#33322E] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#D97757] text-[#141413] dark:text-[#ECEAE4]"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        confirmLink(linkPopover.text, linkPopover.url);
-                      } else if (e.key === "Escape") {
-                        cancelLink();
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 justify-end">
-                <button
-                  type="button"
-                  onClick={cancelLink}
-                  className="px-2.5 py-1.5 rounded-lg border border-[#E0D4C1] dark:border-[#33322E] hover:bg-[#EEEDE9] dark:hover:bg-[#252421] text-[#141413]/70 dark:text-[#ECEAE4]/70 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => confirmLink(linkPopover.text, linkPopover.url)}
-                  className="px-3 py-1.5 rounded-lg bg-[#D97757] text-white hover:bg-[#c46546] font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <span>Link</span>
-                </button>
               </div>
             </motion.div>
           )}
@@ -1135,7 +1235,7 @@ export default function NoteEditor({
             <div className="text-[10px] font-mono text-[#141413]/35 dark:text-[#ECEAE4]/35 flex justify-between items-center pt-4 border-t border-[#E0D4C1]/35 dark:border-[#33322E]/50">
               <div className="flex items-center gap-1.5">
                 <Compass className="w-3 h-3 text-[#D97757]" />
-                <span>Scribe Offline-First Sandbox</span>
+                <span>Scribe Sandbox</span>
               </div>
               <div>
                 <span>{note.content.length} characters</span>
